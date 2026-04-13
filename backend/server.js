@@ -1,3 +1,4 @@
+const User = require("./models/User");
 const Transaction = require("./models/Transaction");
 const mongoose = require("mongoose");
 
@@ -15,14 +16,9 @@ app.get("/", (req, res) => {
   res.send("TradeArena Backend Running");
 });
 
-let user = {
-  balance: 10000,
-  portfolio: {}
-};
-let transactions = [];
-
-
-app.get("/portfolio", (req, res) => {
+app.get("/portfolio", async (req, res) => {
+  const user = await User.findOne();
+  
   res.json(user);
 });
 
@@ -30,27 +26,41 @@ app.post("/buy", async (req, res) => {
   const { stock, quantity, price } = req.body;
 
   const cost = quantity * price;
+  const user = await User.findOne();
+ if (!user) {
+  return res.json({ message: "User not found" });
+}
+
+if (!user.portfolio) {
+  user.portfolio = {};
+}
 
   if (user.balance < cost) {
     return res.json({ message: "Insufficient balance" });
   }
 
-  // Deduct balance
+  // update balance
   user.balance -= cost;
 
-  // Update portfolio
+  // update portfolio
   if (!user.portfolio[stock]) {
     user.portfolio[stock] = 0;
   }
 
   user.portfolio[stock] += quantity;
-  transactions.push({
-  type: "BUY",
-  stock,
-  quantity,
-  price,
-  timestamp: Date.now()
-});
+
+  // mark + save AFTER changes
+  user.markModified("portfolio");
+  await user.save();
+
+  // save transaction (DB, not array)
+  await Transaction.create({
+    type: "BUY",
+    stock,
+    quantity,
+    price,
+    timestamp: Date.now()
+  });
 
   res.json({
     message: "Stock purchased",
@@ -61,29 +71,41 @@ app.post("/buy", async (req, res) => {
 app.post("/sell", async (req, res) => {
   const { stock, quantity, price } = req.body;
 
+  const user = await User.findOne();
+if (!user) {
+  return res.json({ message: "User not found" });
+}
+
+if (!user.portfolio) {
+  user.portfolio = {};
+}
+
   if (!user.portfolio[stock] || user.portfolio[stock] < quantity) {
     return res.json({ message: "Not enough stock to sell" });
   }
 
-  // Add balance
+  // update balance
   user.balance += quantity * price;
 
-  // Reduce stock
+  // update portfolio
   user.portfolio[stock] -= quantity;
 
   if (user.portfolio[stock] === 0) {
     delete user.portfolio[stock];
   }
- 
-  await Transaction.create({
-  type: "SELL",
-  stock,
-  quantity,
-  price,
-  timestamp: Date.now()
-});
 
-console.log("SELL saved to DB");
+  // mark + save
+  user.markModified("portfolio");
+  await user.save();
+
+  // save transaction
+  await Transaction.create({
+    type: "SELL",
+    stock,
+    quantity,
+    price,
+    timestamp: Date.now()
+  });
 
   res.json({
     message: "Stock sold",
@@ -99,3 +121,22 @@ app.get("/transactions", async (req, res) => {
 app.listen(5000, () => {
   console.log("Server running on port 5000");
 });
+
+async function initUser() {
+  let existingUser = await User.findOne();
+
+  if (!existingUser) {
+    await User.create({
+      balance: 10000,
+      portfolio: {}
+    });
+    console.log("User initialized");
+  }
+}
+
+app.get("/reset", async (req, res) => {
+  await User.deleteMany({});
+  res.send("DB reset");
+});
+
+initUser();
