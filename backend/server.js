@@ -1,3 +1,11 @@
+const Transaction = require("./models/Transaction");
+const mongoose = require("mongoose");
+
+mongoose.connect("mongodb://127.0.0.1:27017/tradearena")
+  .then(() => console.log("MongoDB connected"))
+  .catch(err => console.log(err));
+  console.log("Trying to connect to MongoDB...");
+
 const express = require("express");
 const app = express();
 
@@ -7,20 +15,18 @@ app.get("/", (req, res) => {
   res.send("TradeArena Backend Running");
 });
 
-app.listen(5000, () => {
-  console.log("Server running on port 5000");
-});
-
 let user = {
   balance: 10000,
   portfolio: {}
 };
+let transactions = [];
+
 
 app.get("/portfolio", (req, res) => {
   res.json(user);
 });
 
-app.post("/buy", (req, res) => {
+app.post("/buy", async (req, res) => {
   const { stock, quantity, price } = req.body;
 
   const cost = quantity * price;
@@ -38,6 +44,13 @@ app.post("/buy", (req, res) => {
   }
 
   user.portfolio[stock] += quantity;
+  transactions.push({
+  type: "BUY",
+  stock,
+  quantity,
+  price,
+  timestamp: Date.now()
+});
 
   res.json({
     message: "Stock purchased",
@@ -45,7 +58,7 @@ app.post("/buy", (req, res) => {
   });
 });
 
-app.post("/sell", (req, res) => {
+app.post("/sell", async (req, res) => {
   const { stock, quantity, price } = req.body;
 
   if (!user.portfolio[stock] || user.portfolio[stock] < quantity) {
@@ -61,9 +74,28 @@ app.post("/sell", (req, res) => {
   if (user.portfolio[stock] === 0) {
     delete user.portfolio[stock];
   }
+ 
+  await Transaction.create({
+  type: "SELL",
+  stock,
+  quantity,
+  price,
+  timestamp: Date.now()
+});
+
+console.log("SELL saved to DB");
 
   res.json({
     message: "Stock sold",
     user
   });
+});
+
+app.get("/transactions", async (req, res) => {
+  const data = await Transaction.find();
+  res.json(data);
+});
+
+app.listen(5000, () => {
+  console.log("Server running on port 5000");
 });
