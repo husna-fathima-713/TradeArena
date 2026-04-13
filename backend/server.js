@@ -1,3 +1,18 @@
+let prices = {
+  AAPL: 100,
+  TSLA: 200,
+  GOOG: 150
+};
+setInterval(() => {
+  for (let stock in prices) {
+    let change = (Math.random() - 0.5) * 10; // -5 to +5
+    prices[stock] = Math.max(1, prices[stock] + change);
+  }
+
+  console.log("Updated Prices:", prices);
+}, 5000);
+
+
 const User = require("./models/User");
 const Transaction = require("./models/Transaction");
 const mongoose = require("mongoose");
@@ -12,6 +27,10 @@ const app = express();
 
 app.use(express.json());
 
+app.get("/prices", (req, res) => {
+  res.json(prices);
+});
+
 app.get("/", (req, res) => {
   res.send("TradeArena Backend Running");
 });
@@ -23,7 +42,11 @@ app.get("/portfolio", async (req, res) => {
 });
 
 app.post("/buy", async (req, res) => {
-  const { stock, quantity, price } = req.body;
+  const { stock, quantity } = req.body;
+  const price = prices[stock];
+  if (!price) {
+  return res.json({ message: "Invalid stock symbol" });
+}
 
   const cost = quantity * price;
   const user = await User.findOne();
@@ -69,7 +92,11 @@ if (!user.portfolio) {
 });
 
 app.post("/sell", async (req, res) => {
-  const { stock, quantity, price } = req.body;
+  const { stock, quantity } = req.body;
+  const price = prices[stock];
+  if (!price) {
+  return res.json({ message: "Invalid stock symbol" });
+}
 
   const user = await User.findOne();
 if (!user) {
