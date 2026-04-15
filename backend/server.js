@@ -6,7 +6,7 @@ let prices = {
 setInterval(() => {
   for (let stock in prices) {
     let change = (Math.random() - 0.5) * 10; // -5 to +5
-    prices[stock] = Math.max(1, prices[stock] + change);
+    prices[stock] = Math.max(1, Number((prices[stock] + change).toFixed(2)));
   }
 
   console.log("Updated Prices:", prices);
