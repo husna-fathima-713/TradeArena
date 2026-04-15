@@ -43,6 +43,9 @@ app.get("/portfolio", async (req, res) => {
 
 app.post("/buy", async (req, res) => {
   const { stock, quantity } = req.body;
+  if (!stock || typeof quantity !== "number" || quantity <= 0) {
+  return res.json({ message: "Invalid input" });
+}
   const price = prices[stock];
   if (!price) {
   return res.json({ message: "Invalid stock symbol" });
@@ -66,11 +69,22 @@ if (!user.portfolio) {
   user.balance -= cost;
 
   // update portfolio
-  if (!user.portfolio[stock]) {
-    user.portfolio[stock] = 0;
-  }
 
-  user.portfolio[stock] += quantity;
+ if (!user.portfolio[stock]) {
+  user.portfolio[stock] = {
+    quantity: 0,
+    avgPrice: 0
+  };
+}
+
+let existing = user.portfolio[stock];
+
+// new average price formula
+let totalCost = (existing.quantity * existing.avgPrice) + (quantity * price);
+let totalQuantity = existing.quantity + quantity;
+
+existing.quantity = totalQuantity;
+existing.avgPrice = totalCost / totalQuantity;
 
   // mark + save AFTER changes
   user.markModified("portfolio");
@@ -93,6 +107,9 @@ if (!user.portfolio) {
 
 app.post("/sell", async (req, res) => {
   const { stock, quantity } = req.body;
+  if (!stock || typeof quantity !== "number" || quantity <= 0) {
+  return res.json({ message: "Invalid input" });
+}
   const price = prices[stock];
   if (!price) {
   return res.json({ message: "Invalid stock symbol" });
@@ -107,7 +124,7 @@ if (!user.portfolio) {
   user.portfolio = {};
 }
 
-  if (!user.portfolio[stock] || user.portfolio[stock] < quantity) {
+  if (!user.portfolio[stock] || user.portfolio[stock].quantity < quantity) {
     return res.json({ message: "Not enough stock to sell" });
   }
 
@@ -115,9 +132,9 @@ if (!user.portfolio) {
   user.balance += quantity * price;
 
   // update portfolio
-  user.portfolio[stock] -= quantity;
+  user.portfolio[stock].quantity -= quantity;
 
-  if (user.portfolio[stock] === 0) {
+  if (user.portfolio[stock].quantity === 0) {
     delete user.portfolio[stock];
   }
 
@@ -145,20 +162,46 @@ app.get("/transactions", async (req, res) => {
   res.json(data);
 });
 
+
+app.get("/pnl", async (req, res) => {
+  const user = await User.findOne();
+
+  if (!user || !user.portfolio) {
+    return res.json({});
+  }
+
+  let result = {};
+
+  for (let stock in user.portfolio) {
+    let data = user.portfolio[stock];
+    let currentPrice = prices[stock];
+
+    let pnl = (currentPrice - data.avgPrice) * data.quantity;
+
+    result[stock] = {
+      quantity: data.quantity,
+      avgPrice: data.avgPrice,
+      currentPrice,
+      pnl: Number(pnl.toFixed(2)) // fixed type
+    };
+  }
+
+  res.json(result);
+});
+
 app.listen(5000, () => {
   console.log("Server running on port 5000");
 });
 
 async function initUser() {
-  let existingUser = await User.findOne();
+  await User.deleteMany({}); // force clean start
 
-  if (!existingUser) {
-    await User.create({
-      balance: 10000,
-      portfolio: {}
-    });
-    console.log("User initialized");
-  }
+  await User.create({
+    balance: 10000,
+    portfolio: {}
+  });
+
+  console.log("Fresh user created");
 }
 
 app.get("/reset", async (req, res) => {
@@ -167,3 +210,4 @@ app.get("/reset", async (req, res) => {
 });
 
 initUser();
+
