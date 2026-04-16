@@ -3,7 +3,7 @@ import { getPrices } from "./api";
 
 function App() {
   const [stocks, setStocks] = useState([]);
-
+  const [portfolio, setPortfolio] = useState(null);
   useEffect(() => {
   const fetchData = async () => {
     try {
@@ -25,6 +25,7 @@ function App() {
   };
 
   fetchData();
+  fetchPortfolio();
 
   const interval = setInterval(fetchData, 5000);
   return () => clearInterval(interval);
@@ -44,6 +45,7 @@ const handleBuy = async (stock) => {
     });
 
     const data = await res.json();
+    await fetchPortfolio();
     console.log("BUY RESPONSE:", data);
 
   } catch (err) {
@@ -51,23 +53,42 @@ const handleBuy = async (stock) => {
   }
 };
 
-  return (
-    <div>
-      <h1>TradeArena Dashboard</h1>
-      <h2>Live Prices</h2>
+const fetchPortfolio = async () => {
+  const res = await fetch("http://localhost:5000/portfolio");
+  const data = await res.json();
+  console.log("PORTFOLIO:", data);
+  setPortfolio(data);
+};
 
-      {stocks.length === 0 ? (
-        <p>No data</p>
-      ) : (
-        stocks.map((s, i) => (
-          <div key={i}>
-            {s.name}: ₹{s.price}
-            <button onClick={() => handleBuy(s.name)}>Buy</button>
-          </div>
-        ))
-      )}
-    </div>
-  );
+  return (
+  <div>
+    <h1>TradeArena Dashboard</h1>
+
+    <h2>Live Prices</h2>
+    {stocks.length === 0 ? (
+      <p>No data</p>
+    ) : (
+      stocks.map((s, i) => (
+        <div key={i}>
+          {s.name}: ₹{s.price}
+          <button onClick={() => handleBuy(s.name)}>Buy</button>
+        </div>
+      ))
+    )}
+
+    <h2>Portfolio</h2>
+
+    {!portfolio || !portfolio.portfolio ? (
+      <p>No holdings</p>
+    ) : (
+      Object.entries(portfolio.portfolio).map(([stock, data]) => (
+        <div key={stock}>
+          {stock} - Qty: {data.quantity} - Avg: ₹{data.avgPrice.toFixed(2)}
+        </div>
+      ))
+    )}
+  </div>
+);
 }
 
 export default App;
