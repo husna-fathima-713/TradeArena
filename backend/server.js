@@ -23,8 +23,11 @@ mongoose.connect("mongodb://127.0.0.1:27017/tradearena")
   console.log("Trying to connect to MongoDB...");
 
 const express = require("express");
+const cors = require("cors");
+
 const app = express();
 
+app.use(cors());
 app.use(express.json());
 
 app.get("/prices", (req, res) => {
