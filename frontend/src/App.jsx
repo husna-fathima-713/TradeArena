@@ -30,6 +30,27 @@ function App() {
   return () => clearInterval(interval);
 }, []);
 
+const handleBuy = async (stock) => {
+  try {
+    const res = await fetch("http://localhost:5000/buy", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        stock,
+        quantity: 1
+      })
+    });
+
+    const data = await res.json();
+    console.log("BUY RESPONSE:", data);
+
+  } catch (err) {
+    console.error("BUY ERROR:", err);
+  }
+};
+
   return (
     <div>
       <h1>TradeArena Dashboard</h1>
@@ -41,6 +62,7 @@ function App() {
         stocks.map((s, i) => (
           <div key={i}>
             {s.name}: ₹{s.price}
+            <button onClick={() => handleBuy(s.name)}>Buy</button>
           </div>
         ))
       )}
