@@ -4,6 +4,7 @@ import { getPrices } from "./api";
 function App() {
   const [stocks, setStocks] = useState([]);
   const [portfolio, setPortfolio] = useState(null);
+  const [pnl, setPnl] = useState(null);
   useEffect(() => {
   const fetchData = async () => {
     try {
@@ -22,6 +23,7 @@ function App() {
 
   fetchData();
   fetchPortfolio();
+  fetchPnL();
 
   const interval = setInterval(fetchData, 5000);
   return () => clearInterval(interval);
@@ -42,6 +44,7 @@ const handleBuy = async (stock) => {
 
     const data = await res.json();
     await fetchPortfolio();
+    await fetchPnL();
     console.log("BUY RESPONSE:", data);
 
   } catch (err) {
@@ -66,7 +69,7 @@ const handleSell = async (stock) => {
     console.log("SELL RESPONSE:", data);
 
     await fetchPortfolio();
-
+    await fetchPnL();
   } catch (err) {
     console.error("SELL ERROR:", err);
   }
@@ -77,6 +80,17 @@ const fetchPortfolio = async () => {
   const data = await res.json();
   console.log("PORTFOLIO:", data);
   setPortfolio(data);
+};
+
+const fetchPnL = async () => {
+  try {
+    const res = await fetch("http://localhost:5000/pnl");
+    const data = await res.json();
+    console.log("PNL:", data);
+    setPnl(data);
+  } catch (err) {
+    console.error("PNL ERROR:", err);
+  }
 };
 
   return (
@@ -97,13 +111,25 @@ const fetchPortfolio = async () => {
     )}
 
     <h2>Portfolio</h2>
-
     {!portfolio || !portfolio.portfolio ? (
       <p>No holdings</p>
     ) : (
       Object.entries(portfolio.portfolio).map(([stock, data]) => (
         <div key={stock}>
           {stock} - Qty: {data.quantity} - Avg: ₹{data.avgPrice.toFixed(2)}
+        </div>
+      ))
+    )}
+
+    <h2>PnL</h2>
+    {!pnl || Object.keys(pnl).length === 0 ? (
+      <p>No PnL data</p>
+    ) : (
+      Object.entries(pnl).map(([stock, data]) => (
+        <div key={stock}>
+          {stock} | Qty: {data.quantity} | Avg: ₹{data.avgPrice.toFixed(2)} | 
+          Current: ₹{data.currentPrice} | 
+          PnL: ₹{data.pnl}
         </div>
       ))
     )}
