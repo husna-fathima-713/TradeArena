@@ -5,6 +5,7 @@ function App() {
   const [stocks, setStocks] = useState([]);
   const [portfolio, setPortfolio] = useState(null);
   const [pnl, setPnl] = useState(null);
+  const [transactions, setTransactions] = useState([]);
   useEffect(() => {
   const fetchData = async () => {
     try {
@@ -24,6 +25,7 @@ function App() {
   fetchData();
   fetchPortfolio();
   fetchPnL();
+  fetchTransactions();
 
   const interval = setInterval(fetchData, 5000);
   return () => clearInterval(interval);
@@ -45,6 +47,7 @@ const handleBuy = async (stock) => {
     const data = await res.json();
     await fetchPortfolio();
     await fetchPnL();
+    await fetchTransactions();
     console.log("BUY RESPONSE:", data);
 
   } catch (err) {
@@ -70,6 +73,7 @@ const handleSell = async (stock) => {
 
     await fetchPortfolio();
     await fetchPnL();
+    await fetchTransactions();
   } catch (err) {
     console.error("SELL ERROR:", err);
   }
@@ -93,6 +97,16 @@ const fetchPnL = async () => {
   }
 };
 
+const fetchTransactions = async () => {
+  try {
+    const res = await fetch("http://localhost:5000/transactions");
+    const data = await res.json();
+    console.log("TRANSACTIONS:", data);
+    setTransactions(data);
+  } catch (err) {
+    console.error("TX ERROR:", err);
+  }
+};
   return (
   <div>
     <h1>TradeArena Dashboard</h1>
@@ -130,6 +144,17 @@ const fetchPnL = async () => {
           {stock} | Qty: {data.quantity} | Avg: ₹{data.avgPrice.toFixed(2)} | 
           Current: ₹{data.currentPrice} | 
           PnL: ₹{data.pnl}
+        </div>
+      ))
+    )}
+    
+    <h2>Transactions</h2>
+    {transactions.length === 0 ? (
+      <p>No transactions</p>
+    ) : (
+      transactions.map((t, i) => (
+        <div key={i}>
+          {t.type} | {t.stock} | Qty: {t.quantity} | ₹{t.price}
         </div>
       ))
     )}
