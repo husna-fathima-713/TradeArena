@@ -9,14 +9,10 @@ function App() {
     try {
       const data = await getPrices();
 
-      console.log("RAW API:", data); // ✅ MOVE HERE
-
       const formatted = Object.entries(data).map(([name, price]) => ({
         name,
         price
       }));
-
-      console.log("FORMATTED:", formatted);
 
       setStocks(formatted);
     } catch (err) {
@@ -53,6 +49,29 @@ const handleBuy = async (stock) => {
   }
 };
 
+const handleSell = async (stock) => {
+  try {
+    const res = await fetch("http://localhost:5000/sell", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        stock,
+        quantity: 1
+      })
+    });
+
+    const data = await res.json();
+    console.log("SELL RESPONSE:", data);
+
+    await fetchPortfolio();
+
+  } catch (err) {
+    console.error("SELL ERROR:", err);
+  }
+};
+
 const fetchPortfolio = async () => {
   const res = await fetch("http://localhost:5000/portfolio");
   const data = await res.json();
@@ -72,6 +91,7 @@ const fetchPortfolio = async () => {
         <div key={i}>
           {s.name}: ₹{s.price}
           <button onClick={() => handleBuy(s.name)}>Buy</button>
+          <button onClick={() => handleSell(s.name)}>Sell</button>
         </div>
       ))
     )}
