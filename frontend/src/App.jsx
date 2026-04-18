@@ -7,7 +7,7 @@ function App() {
   const [pnl, setPnl] = useState(null);
   const [transactions, setTransactions] = useState([]);
   const [quantity, setQuantity] = useState(1);
-  const [loading, setLoading] = useState(false);
+  const [loadingStock, setLoadingStock] = useState(null);
   useEffect(() => {
   const fetchData = async () => {
     try {
@@ -34,13 +34,13 @@ function App() {
 }, []);
 
 const handleBuy = async (stock) => {
-  if(loading)return;
+  if (loadingStock === stock) return;
   try {
     if (quantity <= 0) {
       alert("Invalid quantity");
       return;
     }
-    setLoading(true);
+    setLoadingStock(stock);
 
     const res = await fetch("http://localhost:5000/buy", {
       method: "POST",
@@ -56,27 +56,29 @@ const handleBuy = async (stock) => {
     const data = await res.json();
     console.log("BUY RESPONSE:", data);
 
-    await fetchPortfolio();
-    await fetchPnL();
-    await fetchTransactions();
+    await Promise.all([
+      fetchPortfolio(),
+      fetchPnL(),
+      fetchTransactions()
+   ]);
     console.log("BUY RESPONSE:", data);
 
   } catch (err) {
     console.error("BUY ERROR:", err);
     alert("Buy failed");
   }finally {
-    setLoading(false);
+    setLoadingStock(null);
   }
 };
 
 const handleSell = async (stock) => {
-  if (loading) return;
+  if (loadingStock === stock) return;
   try {
      if (quantity <= 0) {
       alert("Invalid quantity");
       return;
     }
-    setLoading(true);
+    setLoadingStock(stock);
 
     const res = await fetch("http://localhost:5000/sell", {
       method: "POST",
@@ -100,7 +102,7 @@ const handleSell = async (stock) => {
     console.error("SELL ERROR:", err);
     alert("Sell failed");
   }finally {
-    setLoading(false);
+    setLoadingStock(null);
   }
 };
 
@@ -152,12 +154,12 @@ const fetchTransactions = async () => {
       stocks.map((s, i) => (
         <div key={i}>
           {s.name}: ₹{s.price}
-          <button disabled={loading} onClick={() => handleBuy(s.name)}>
-            {loading ? "Processing..." : "Buy"}
+          <button disabled={loadingStock === s.name} onClick={() => handleBuy(s.name)}>
+            {loadingStock === s.name ? "Processing..." : "Buy"}
           </button>
 
-          <button disabled={loading} onClick={() => handleSell(s.name)}>
-            {loading ? "Processing..." : "Sell"}
+          <button disabled={loadingStock === s.name} onClick={() => handleSell(s.name)}>
+            {loadingStock === s.name ? "Processing..." : "Sell"}
           </button>
         </div>
       ))
