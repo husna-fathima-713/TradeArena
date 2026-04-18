@@ -31,6 +31,7 @@ app.use(cors());
 app.use(express.json());
 
 app.get("/prices", (req, res) => {
+  console.log("BUY API HIT");
   res.json(prices);
 });
 
@@ -110,6 +111,7 @@ existing.avgPrice = totalCost / totalQuantity;
 });
 
 app.post("/sell", async (req, res) => {
+  console.log("BUY API HIT");
   const { stock, quantity } = req.body;
   if (!stock || typeof quantity !== "number" || quantity <= 0) {
   return res.json({ message: "Invalid input" });
