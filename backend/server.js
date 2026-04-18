@@ -45,6 +45,7 @@ app.get("/portfolio", async (req, res) => {
 });
 
 app.post("/buy", async (req, res) => {
+  console.log("BUY API HIT");
   const { stock, quantity } = req.body;
   if (!stock || typeof quantity !== "number" || quantity <= 0) {
   return res.json({ message: "Invalid input" });
