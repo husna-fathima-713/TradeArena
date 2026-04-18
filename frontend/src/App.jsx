@@ -6,6 +6,7 @@ function App() {
   const [portfolio, setPortfolio] = useState(null);
   const [pnl, setPnl] = useState(null);
   const [transactions, setTransactions] = useState([]);
+  const [quantity, setQuantity] = useState(1);
   useEffect(() => {
   const fetchData = async () => {
     try {
@@ -33,6 +34,11 @@ function App() {
 
 const handleBuy = async (stock) => {
   try {
+    if (quantity <= 0) {
+      alert("Invalid quantity");
+      return;
+    }
+
     const res = await fetch("http://localhost:5000/buy", {
       method: "POST",
       headers: {
@@ -40,7 +46,7 @@ const handleBuy = async (stock) => {
       },
       body: JSON.stringify({
         stock,
-        quantity: 1
+        quantity
       })
     });
 
@@ -57,6 +63,10 @@ const handleBuy = async (stock) => {
 
 const handleSell = async (stock) => {
   try {
+     if (quantity <= 0) {
+      alert("Invalid quantity");
+      return;
+    }
     const res = await fetch("http://localhost:5000/sell", {
       method: "POST",
       headers: {
@@ -64,12 +74,14 @@ const handleSell = async (stock) => {
       },
       body: JSON.stringify({
         stock,
-        quantity: 1
+        quantity
       })
     });
 
     const data = await res.json();
     console.log("SELL RESPONSE:", data);
+
+    
 
     await fetchPortfolio();
     await fetchPnL();
@@ -110,6 +122,15 @@ const fetchTransactions = async () => {
   return (
   <div>
     <h1>TradeArena Dashboard</h1>
+
+    <h2>Trade Controls</h2>
+
+    <input
+    type="number"
+    value={quantity}
+    min="1"
+    onChange={(e) => setQuantity(Number(e.target.value))}
+    />
 
     <h2>Live Prices</h2>
     {stocks.length === 0 ? (
