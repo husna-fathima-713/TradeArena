@@ -64,7 +64,6 @@ const handleBuy = async (stock) => {
     console.log("BUY RESPONSE:", data);
 
   } catch (err) {
-    console.error("BUY ERROR:", err);
     alert("Buy failed");
   }finally {
     setLoadingStock(null);
