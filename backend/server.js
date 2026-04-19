@@ -1,3 +1,6 @@
+const lastTradeTime = {}; // simple in-memory cooldown
+const COOLDOWN_MS = 1500; // 1.5 sec per stock per user
+const MAX_QTY_PER_TRADE = 10;
 const express = require("express");
 const cors = require("cors");
 const mongoose = require("mongoose");
@@ -10,7 +13,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// -------------------- PRICE ENGINE --------------------
+// ---------------- PRICE ENGINE ----------------
 
 let prices = {
   AAPL: 100,
@@ -19,90 +22,71 @@ let prices = {
 };
 
 setInterval(() => {
-  for (let stock in prices) {
+  for (let s in prices) {
     let change = (Math.random() - 0.5) * 10;
-    prices[stock] = Math.max(
-      1,
-      Number((prices[stock] + change).toFixed(2))
-    );
+    prices[s] = Math.max(1, Number((prices[s] + change).toFixed(2)));
   }
-
-  console.log("Updated Prices:", prices);
 }, 5000);
 
-// -------------------- DB CONNECT --------------------
+// ---------------- DB ----------------
 
 mongoose.connect("mongodb://127.0.0.1:27017/tradearena")
-  .then(() => console.log("MongoDB connected"))
-  .catch(err => console.log(err));
+  .then(() => console.log("MongoDB connected"));
 
-console.log("Trying to connect to MongoDB...");
-
-// -------------------- ROUTES --------------------
-
-// Health check
-app.get("/", (req, res) => {
-  res.send("TradeArena Backend Running");
-});
-
-// Prices
-app.get("/prices", (req, res) => {
-  res.json(prices);
-});
-
-// Portfolio
-app.get("/portfolio", async (req, res) => {
-  const user = await User.findOne();
-  res.json(user);
-});
-
-// -------------------- BUY --------------------
+// ---------------- BUY ----------------
 
 app.post("/buy", async (req, res) => {
   try {
-    console.log("BUY API HIT");
-
     const { stock, quantity } = req.body;
+    const qty = Number(quantity);
 
-    const user = await User.findOne(); // ✅ MOVE THIS UP
-
-    console.log("PORTFOLIO STATE:", user.portfolio); // NOW SAFE
-
-    if (!stock || !quantity || quantity <= 0) {
-      return res.json({ message: "Invalid input" });
+    if (!stock || !qty || qty <= 0) {
+      return res.status(400).json({ error: "Invalid input" });
     }
+
+    // ---------------- RULE 1: MAX ORDER LIMIT ----------------
+    if (qty > MAX_QTY_PER_TRADE) {
+      return res.status(400).json({
+        error: `Max ${MAX_QTY_PER_TRADE} per order`
+      });
+    }
+
+    // ---------------- RULE 2: COOLDOWN ----------------
+    const now = Date.now();
+    const key = `${stock}_buy`;
+
+    if (lastTradeTime[key] && now - lastTradeTime[key] < COOLDOWN_MS) {
+      return res.status(429).json({
+        error: "Slow down. Trading cooldown active."
+      });
+    }
+
+    lastTradeTime[key] = now;
 
     const price = prices[stock];
-    if (!price) {
-      return res.json({ message: "Invalid stock symbol" });
-    }
+    if (!price) return res.status(400).json({ error: "Invalid stock" });
 
-    if (!user) {
-      return res.json({ message: "User not found" });
-    }
+    const user = await User.findOne();
+    if (!user) return res.status(404).json({ error: "User missing" });
 
     if (!user.portfolio) user.portfolio = {};
 
-    const cost = quantity * price;
-
+    const cost = qty * price;
     if (user.balance < cost) {
-      return res.json({ message: "Insufficient balance" });
+      return res.status(400).json({ error: "No balance" });
     }
 
     if (!user.portfolio[stock]) {
       user.portfolio[stock] = { quantity: 0, avgPrice: 0 };
     }
 
-    let existing = user.portfolio[stock];
+    const p = user.portfolio[stock];
 
-    let totalCost =
-      (existing.quantity * existing.avgPrice) +
-      (quantity * price);
+    const newQty = p.quantity + qty;
+    const newCost = (p.quantity * p.avgPrice) + (qty * price);
 
-    let totalQuantity = existing.quantity + quantity;
-
-    existing.quantity = totalQuantity;
-    existing.avgPrice = totalCost / totalQuantity;
+    p.quantity = newQty;
+    p.avgPrice = newCost / newQty;
 
     user.balance -= cost;
 
@@ -112,58 +96,58 @@ app.post("/buy", async (req, res) => {
     await Transaction.create({
       type: "BUY",
       stock,
-      quantity,
-      price,
-      timestamp: Date.now()
+      quantity: qty,
+      price
     });
 
-    res.json({
-      message: "Stock purchased",
-      user
-    });
+    res.json({ ok: true });
 
-  } catch (err) {
-    console.error("BUY FAILED:", err);
-    res.status(500).json({ error: "BUY failed", details: err.message });
+  } catch (e) {
+    res.status(500).json({ error: "BUY failed" });
   }
 });
 
-// -------------------- SELL --------------------
+// ---------------- SELL ----------------
 
 app.post("/sell", async (req, res) => {
   try {
-    console.log("SELL API HIT");
-
     const { stock, quantity } = req.body;
+    const qty = Number(quantity);
 
-    if (!stock || typeof quantity !== "number" || quantity <= 0) {
-      return res.json({ message: "Invalid input" });
+    if (!stock || !qty || qty <= 0) {
+      return res.status(400).json({ error: "Invalid input" });
     }
+
+    if (qty > MAX_QTY_PER_TRADE) {
+      return res.status(400).json({ error: "Max limit exceeded" });
+    }
+
+    const key = `${stock}_sell`;
+    const now = Date.now();
+
+    if (lastTradeTime[key] && now - lastTradeTime[key] < COOLDOWN_MS) {
+      return res.status(429).json({ error: "Cooldown active" });
+    }
+
+    lastTradeTime[key] = now;
 
     const price = prices[stock];
-    if (!price) {
-      return res.json({ message: "Invalid stock symbol" });
-    }
-
     const user = await User.findOne();
-    if (!user) {
-      return res.json({ message: "User not found" });
+
+    if (!user?.portfolio?.[stock]) {
+      return res.status(400).json({ error: "No stock" });
     }
 
-    if (!user.portfolio || !user.portfolio[stock]) {
-      return res.json({ message: "No stock owned" });
+    const p = user.portfolio[stock];
+
+    if (p.quantity < qty) {
+      return res.status(400).json({ error: "Not enough stock" });
     }
 
-    if (user.portfolio[stock].quantity < quantity) {
-      return res.json({ message: "Not enough stock" });
-    }
+    user.balance += qty * price;
+    p.quantity -= qty;
 
-    user.balance += quantity * price;
-    user.portfolio[stock].quantity -= quantity;
-
-    if (user.portfolio[stock].quantity === 0) {
-      delete user.portfolio[stock];
-    }
+    if (p.quantity === 0) delete user.portfolio[stock];
 
     user.markModified("portfolio");
     await user.save();
@@ -171,125 +155,65 @@ app.post("/sell", async (req, res) => {
     await Transaction.create({
       type: "SELL",
       stock,
-      quantity,
-      price,
-      timestamp: Date.now()
+      quantity: qty,
+      price
     });
 
-    res.json({
-      message: "Stock sold",
-      user
-    });
+    res.json({ ok: true });
 
-  } catch (err) {
-    console.error(err);
+  } catch {
     res.status(500).json({ error: "SELL failed" });
   }
 });
 
-// -------------------- TRANSACTIONS --------------------
+// ---------------- RESET HISTORY (NEW FEATURE) ----------------
 
-app.get("/transactions", async (req, res) => {
-  const data = await Transaction.find();
-  res.json(data);
+app.delete("/history", async (req, res) => {
+  await Transaction.deleteMany({});
+  res.json({ ok: true });
 });
 
-// -------------------- PNL --------------------
+// ---------------- DATA ----------------
+
+app.get("/prices", (req, res) => res.json(prices));
+
+app.get("/portfolio", async (req, res) => {
+  res.json(await User.findOne());
+});
+
+app.get("/transactions", async (req, res) => {
+  res.json(await Transaction.find().sort({ _id: -1 }));
+});
 
 app.get("/pnl", async (req, res) => {
   const user = await User.findOne();
+  if (!user?.portfolio) return res.json({});
 
-  if (!user || !user.portfolio) {
-    return res.json({});
-  }
+  let out = {};
 
-  let result = {};
+  for (let s in user.portfolio) {
+    let d = user.portfolio[s];
+    let cp = prices[s];
+    if (!cp) continue;
 
-  for (let stock in user.portfolio) {
-    let data = user.portfolio[stock];
-    let currentPrice = prices[stock];
-
-    if (!currentPrice) continue;
-
-    let pnl = (currentPrice - data.avgPrice) * data.quantity;
-
-    result[stock] = {
-      quantity: data.quantity,
-      avgPrice: data.avgPrice,
-      currentPrice,
-      pnl: Number(pnl.toFixed(2))
+    out[s] = {
+      qty: d.quantity,
+      avg: d.avgPrice,
+      price: cp,
+      pnl: Number(((cp - d.avgPrice) * d.quantity).toFixed(2))
     };
   }
 
-  res.json(result);
+  res.json(out);
 });
 
-// -------------------- DASHBOARD --------------------
-
-app.get("/dashboard", async (req, res) => {
-  try {
-    const user = await User.findOne();
-    const transactions = await Transaction.find();
-
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    let pnl = {};
-
-    for (let stock in (user.portfolio || {})) {
-      let data = user.portfolio[stock];
-      let currentPrice = prices[stock];
-
-      if (!currentPrice) continue;
-
-      pnl[stock] = {
-        quantity: data.quantity,
-        avgPrice: data.avgPrice,
-        currentPrice,
-        pnl: Number(
-          ((currentPrice - data.avgPrice) * data.quantity).toFixed(2)
-        )
-      };
-    }
-
-    res.json({
-      portfolio: user.portfolio || {},
-      balance: user.balance,
-      pnl,
-      transactions
-    });
-
-  } catch (err) {
-    console.error("DASHBOARD ERROR:", err);
-    res.status(500).json({ error: "Failed to load dashboard" });
-  }
-});
-
-// -------------------- RESET --------------------
-
-app.get("/reset", async (req, res) => {
-  await User.deleteMany({});
-  res.send("DB reset");
-});
-
-// -------------------- INIT USER --------------------
+// ---------------- INIT ----------------
 
 async function initUser() {
   await User.deleteMany({});
-
-  await User.create({
-    balance: 10000,
-    portfolio: {}
-  });
-
-  console.log("Fresh user created");
+  await User.create({ balance: 10000, portfolio: {} });
 }
 
-// -------------------- START SERVER --------------------
-
-app.listen(5000, () => {
-  console.log("Server running on port 5000");
-});
+app.listen(5000, () => console.log("Server running"));
 
 initUser();

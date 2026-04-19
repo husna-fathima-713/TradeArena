@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { getPrices } from "./api";
 
 function App() {
@@ -6,200 +6,172 @@ function App() {
   const [portfolio, setPortfolio] = useState(null);
   const [pnl, setPnl] = useState(null);
   const [transactions, setTransactions] = useState([]);
+
   const [quantity, setQuantity] = useState(1);
+  const [loading, setLoading] = useState(false);
   const [loadingStock, setLoadingStock] = useState(null);
+  const [error, setError] = useState(null);
+
+  // 🔒 REAL ANTI-SPAM LOCK (IMPORTANT)
+  const lockRef = useRef(false);
+
+  // ---------------- FETCH ----------------
+
   useEffect(() => {
-  const fetchData = async () => {
-    try {
+    const fetchData = async () => {
       const data = await getPrices();
+      setStocks(Object.entries(data).map(([name, price]) => ({ name, price })));
+    };
 
-      const formatted = Object.entries(data).map(([name, price]) => ({
-        name,
-        price
-      }));
+    fetchData();
+    fetchPortfolio();
+    fetchPnL();
+    fetchTransactions();
 
-      setStocks(formatted);
-    } catch (err) {
-      console.error("ERROR:", err);
-    }
+    const interval = setInterval(fetchData, 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchPortfolio = async () => {
+    const res = await fetch("http://localhost:5000/portfolio");
+    setPortfolio(await res.json());
   };
 
-  fetchData();
-  fetchPortfolio();
-  fetchPnL();
-  fetchTransactions();
-
-  const interval = setInterval(fetchData, 5000);
-  return () => clearInterval(interval);
-}, []);
-
-const handleBuy = async (stock) => {
-  if (loadingStock === stock) return;
-  try {
-    if (quantity <= 0) {
-      alert("Invalid quantity");
-      return;
-    }
-    setLoadingStock(stock);
-
-    const res = await fetch("http://localhost:5000/buy", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        stock,
-        quantity
-      })
-    });
-
-    const data = await res.json();
-    console.log("BUY RESPONSE:", data);
-
-    await Promise.all([
-      fetchPortfolio(),
-      fetchPnL(),
-      fetchTransactions()
-   ]);
-    console.log("BUY RESPONSE:", data);
-
-  } catch (err) {
-    alert("Buy failed");
-  }finally {
-    setLoadingStock(null);
-  }
-};
-
-const handleSell = async (stock) => {
-  if (loadingStock === stock) return;
-  try {
-     if (quantity <= 0) {
-      alert("Invalid quantity");
-      return;
-    }
-    setLoadingStock(stock);
-
-    const res = await fetch("http://localhost:5000/sell", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        stock,
-        quantity
-      })
-    });
-
-    const data = await res.json();
-    console.log("SELL RESPONSE:", data);
-
-    await fetchPortfolio();
-    await fetchPnL();
-    await fetchTransactions();
-
-  } catch (err) {
-    console.error("SELL ERROR:", err);
-    alert("Sell failed");
-  }finally {
-    setLoadingStock(null);
-  }
-};
-
-const fetchPortfolio = async () => {
-  const res = await fetch("http://localhost:5000/portfolio");
-  const data = await res.json();
-  console.log("PORTFOLIO:", data);
-  setPortfolio(data);
-};
-
-const fetchPnL = async () => {
-  try {
+  const fetchPnL = async () => {
     const res = await fetch("http://localhost:5000/pnl");
-    const data = await res.json();
-    console.log("PNL:", data);
-    setPnl(data);
-  } catch (err) {
-    console.error("PNL ERROR:", err);
-  }
-};
+    setPnl(await res.json());
+  };
 
-const fetchTransactions = async () => {
-  try {
+  const fetchTransactions = async () => {
     const res = await fetch("http://localhost:5000/transactions");
-    const data = await res.json();
-    console.log("TRANSACTIONS:", data);
-    setTransactions(data);
-  } catch (err) {
-    console.error("TX ERROR:", err);
-  }
-};
+    setTransactions(await res.json());
+  };
+
+  // ---------------- BUY ----------------
+
+  const handleBuy = async (stock) => {
+    if (lockRef.current) return;
+
+    lockRef.current = true;
+    setLoading(true);
+    setLoadingStock(stock);
+    setError(null);
+
+    try {
+      const res = await fetch("http://localhost:5000/buy", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stock, quantity })
+      });
+
+      const data = await res.json();
+      if (data.error) setError(data.error);
+
+      await Promise.all([
+        fetchPortfolio(),
+        fetchPnL(),
+        fetchTransactions()
+      ]);
+
+    } catch {
+      setError("Buy failed");
+    }
+
+    lockRef.current = false;
+    setLoading(false);
+    setLoadingStock(null);
+  };
+
+  // ---------------- SELL ----------------
+
+  const handleSell = async (stock) => {
+    if (lockRef.current) return;
+
+    lockRef.current = true;
+    setLoading(true);
+    setLoadingStock(stock);
+    setError(null);
+
+    try {
+      const res = await fetch("http://localhost:5000/sell", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stock, quantity })
+      });
+
+      const data = await res.json();
+      if (data.error) setError(data.error);
+
+      await Promise.all([
+        fetchPortfolio(),
+        fetchPnL(),
+        fetchTransactions()
+      ]);
+
+    } catch {
+      setError("Sell failed");
+    }
+
+    lockRef.current = false;
+    setLoading(false);
+    setLoadingStock(null);
+  };
+
+  // ---------------- UI ----------------
+
   return (
-  <div>
-    <h1>TradeArena Dashboard</h1>
+    <div style={{ padding: 20, fontFamily: "Arial" }}>
+      <h1>TradeArena</h1>
 
-    <h2>Trade Controls</h2>
+      {error && <p style={{ color: "red" }}>{error}</p>}
 
-    <input
-    type="number"
-    value={quantity}
-    min="1"
-    onChange={(e) => setQuantity(Number(e.target.value))}
-    />
+      <input
+        type="number"
+        min="1"
+        value={quantity}
+        onChange={(e) => setQuantity(Number(e.target.value))}
+      />
 
-    <h2>Live Prices</h2>
-    {stocks.length === 0 ? (
-      <p>No data</p>
-    ) : (
-      stocks.map((s, i) => (
-        <div key={i}>
-          {s.name}: ₹{s.price}
-          <button disabled={loadingStock === s.name} onClick={() => handleBuy(s.name)}>
-            {loadingStock === s.name ? "Processing..." : "Buy"}
+      <h2>Live Prices</h2>
+
+      {stocks.map((s) => (
+        <div key={s.name} style={{ marginBottom: 10 }}>
+          {s.name}: ₹{Number(s.price).toFixed(2)}
+
+          <button onClick={() => handleBuy(s.name)} disabled={loading}>
+            Buy
           </button>
 
-          <button disabled={loadingStock === s.name} onClick={() => handleSell(s.name)}>
-            {loadingStock === s.name ? "Processing..." : "Sell"}
+          <button onClick={() => handleSell(s.name)} disabled={loading}>
+            Sell
           </button>
         </div>
-      ))
-    )}
+      ))}
 
-    <h2>Portfolio</h2>
-    {!portfolio || !portfolio.portfolio ? (
-      <p>No holdings</p>
-    ) : (
-      Object.entries(portfolio.portfolio).map(([stock, data]) => (
-        <div key={stock}>
-          {stock} - Qty: {data.quantity} - Avg: ₹{data.avgPrice.toFixed(2)}
-        </div>
-      ))
-    )}
+      <h2>Portfolio</h2>
+      {portfolio?.portfolio &&
+        Object.entries(portfolio.portfolio).map(([k, v]) => (
+          <div key={k}>
+            {k} | Qty: {v.quantity} | Avg: ₹{v.avgPrice.toFixed(2)}
+          </div>
+        ))}
 
-    <h2>PnL</h2>
-    {!pnl || Object.keys(pnl).length === 0 ? (
-      <p>No PnL data</p>
-    ) : (
-      Object.entries(pnl).map(([stock, data]) => (
-        <div key={stock}>
-          {stock} | Qty: {data.quantity} | Avg: ₹{data.avgPrice.toFixed(2)} | 
-          Current: ₹{data.currentPrice} | 
-          PnL: ₹{data.pnl}
-        </div>
-      ))
-    )}
-    
-    <h2>Transactions</h2>
-    {transactions.length === 0 ? (
-      <p>No transactions</p>
-    ) : (
-      transactions.map((t, i) => (
+      <h2>PnL</h2>
+      {pnl &&
+        Object.entries(pnl).map(([k, v]) => (
+          <div key={k}>
+            {k} | PnL: ₹{v.pnl}
+          </div>
+        ))}
+
+      <h2>Transactions</h2>
+      {transactions.map((t, i) => (
         <div key={i}>
-          {t.type} | {t.stock} | Qty: {t.quantity} | ₹{t.price}
+          {t.type} | {t.stock} | {t.quantity} | ₹{t.price}
         </div>
-      ))
-    )}
-  </div>
-);
+      ))}
+    </div>
+  );
 }
 
 export default App;
