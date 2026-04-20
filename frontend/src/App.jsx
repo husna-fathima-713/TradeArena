@@ -7,6 +7,7 @@ import {
   Tooltip,
   ResponsiveContainer
 } from "recharts";
+import "./App.css";
 
 function App() {
   const [stocks, setStocks] = useState([]);
@@ -123,31 +124,40 @@ function App() {
   // ---------------- UI ----------------
 
   return (
-    <div style={{ padding: 20, fontFamily: "Arial" }}>
-      <h1>TradeArena</h1>
+  <div className="container">
+    <h1>TradeArena</h1>
 
-      {error && <p style={{ color: "red" }}>{error}</p>}
+    {error && <p className="red">{error}</p>}
 
+    {/* ACCOUNT */}
+    <div className="card">
       <h2>Account</h2>
       {dashboard && (
-        <div>
-          <p>Balance: ₹{dashboard.balance.toFixed(2)}</p>
-          <p>Holdings: ₹{dashboard.holdingsValue.toFixed(2)}</p>
-          <p><b>Total: ₹{dashboard.totalValue.toFixed(2)}</b></p>
+        <div className="row">
+          <div className="col">Balance: ₹{dashboard.balance.toFixed(2)}</div>
+          <div className="col">Holdings: ₹{dashboard.holdingsValue.toFixed(2)}</div>
+          <div className="col"><b>Total: ₹{dashboard.totalValue.toFixed(2)}</b></div>
         </div>
       )}
+    </div>
 
+    {/* GRAPH */}
+    <div className="card">
       <h2>Portfolio Growth</h2>
       <ResponsiveContainer width="100%" height={300}>
         <LineChart data={valueHistory}>
           <XAxis dataKey="timestamp" hide />
           <YAxis />
           <Tooltip />
-         <Line type="monotone" dataKey="totalValue" stroke="#00c853" />
-         </LineChart>
+          <Line type="monotone" dataKey="totalValue" stroke="#00e676" />
+        </LineChart>
       </ResponsiveContainer>
+    </div>
 
+    {/* TRADE */}
+    <div className="card">
       <h2>Trade</h2>
+
       <input
         type="number"
         min="1"
@@ -159,51 +169,52 @@ function App() {
         <div key={s.name}>
           {s.name}: ₹{Number(s.price).toFixed(2)}
 
-          <button
-            disabled={loading}
-            onClick={() => handleBuy(s.name)}
-          >
-            {loadingStock === s.name ? "..." : "Buy"}
+          <button disabled={loading} onClick={() => handleBuy(s.name)}>
+            Buy
           </button>
 
-          <button
-            disabled={loading}
-            onClick={() => handleSell(s.name)}
-          >
-            {loadingStock === s.name ? "..." : "Sell"}
+          <button disabled={loading} onClick={() => handleSell(s.name)}>
+            Sell
           </button>
         </div>
       ))}
+    </div>
 
+    {/* PORTFOLIO */}
+    <div className="card">
       <h2>Portfolio</h2>
+
       {dashboard?.portfolio &&
         Object.entries(dashboard.portfolio).map(([stock, data]) => (
           <div key={stock}>
             {stock} → {data.quantity} @ ₹{data.avgPrice.toFixed(2)}
           </div>
         ))}
+    </div>
 
+    {/* PNL */}
+    <div className="card">
       <h2>PnL</h2>
+
       {dashboard?.pnl &&
         Object.entries(dashboard.pnl).map(([stock, data]) => (
           <div key={stock}>
-            {stock} → ₹{data.pnl}
+            {stock} → 
+            <span className={data.pnl >= 0 ? "green" : "red"}>
+              ₹{data.pnl}
+            </span>
           </div>
         ))}
+    </div>
 
+    {/* TRANSACTIONS */}
+    <div className="card">
       <h2>
         Transactions
-        <button onClick={clearHistory} style={{ marginLeft: 10 }}>
-          Clear
-        </button>
+        <button onClick={clearHistory}>Clear</button>
       </h2>
 
-      <div style={{
-        maxHeight: 200,
-        overflowY: "scroll",
-        border: "1px solid #ccc",
-        padding: 10
-      }}>
+      <div style={{ maxHeight: 200, overflowY: "scroll" }}>
         {dashboard?.transactions?.map((t, i) => (
           <div key={i}>
             [{t.type}] {t.stock} x{t.quantity} @ ₹{t.price}
@@ -211,7 +222,8 @@ function App() {
         ))}
       </div>
     </div>
-  );
+  </div>
+);
 }
 
 export default App;
