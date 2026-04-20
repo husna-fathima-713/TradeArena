@@ -1,3 +1,4 @@
+const ValueSnapshot = require("./models/ValueSnapshot");
 const lastTradeTime = {}; // simple in-memory cooldown
 const COOLDOWN_MS = 1500; // 1.5 sec per stock per user
 const MAX_QTY_PER_TRADE = 10;
@@ -25,6 +26,33 @@ setInterval(() => {
   for (let s in prices) {
     let change = (Math.random() - 0.5) * 10;
     prices[s] = Math.max(1, Number((prices[s] + change).toFixed(2)));
+  }
+}, 5000);
+
+setInterval(async () => {
+  try {
+    const user = await User.findOne();
+    if (!user) return;
+
+    let holdingsValue = 0;
+
+    for (let stock in (user.portfolio || {})) {
+      const data = user.portfolio[stock];
+      const price = prices[stock];
+
+      if (!price) continue;
+
+      holdingsValue += data.quantity * price;
+    }
+
+    const totalValue = holdingsValue + user.balance;
+
+    await ValueSnapshot.create({
+      totalValue
+    });
+
+  } catch (err) {
+    console.log("Snapshot error:", err.message);
   }
 }, 5000);
 
@@ -253,6 +281,13 @@ app.get("/dashboard", async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: "Dashboard failed" });
   }
+});
+
+//---------------- HISTORY SNAPSHOT ----------------
+
+app.get("/history/value", async (req, res) => {
+  const data = await ValueSnapshot.find().sort({ timestamp: 1 }).limit(100);
+  res.json(data);
 });
 
 // ---------------- INIT ----------------

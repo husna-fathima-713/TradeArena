@@ -1,8 +1,17 @@
 import { useEffect, useState, useRef } from "react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer
+} from "recharts";
 
 function App() {
   const [stocks, setStocks] = useState([]);
   const [dashboard, setDashboard] = useState(null);
+  const [valueHistory, setValueHistory] = useState([]);
 
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -44,10 +53,12 @@ function App() {
   useEffect(() => {
     fetchDashboard();
     fetchPrices();
+    fetchValueHistory();
 
     const interval = setInterval(() => {
       fetchDashboard();
       fetchPrices();
+      fetchValueHistory();
     }, 5000);
 
     return () => clearInterval(interval);
@@ -97,6 +108,18 @@ function App() {
     fetchDashboard();
   };
 
+  //---------------- FETCH VALUE HISTORY ----------------
+
+  const fetchValueHistory = async () => {
+  try {
+    const res = await fetch("http://localhost:5000/history/value");
+    const data = await res.json();
+    setValueHistory(data);
+  } catch {
+    setError("History load failed");
+  }
+};
+
   // ---------------- UI ----------------
 
   return (
@@ -113,6 +136,16 @@ function App() {
           <p><b>Total: ₹{dashboard.totalValue.toFixed(2)}</b></p>
         </div>
       )}
+
+      <h2>Portfolio Growth</h2>
+      <ResponsiveContainer width="100%" height={300}>
+        <LineChart data={valueHistory}>
+          <XAxis dataKey="timestamp" hide />
+          <YAxis />
+          <Tooltip />
+         <Line type="monotone" dataKey="totalValue" stroke="#00c853" />
+         </LineChart>
+      </ResponsiveContainer>
 
       <h2>Trade</h2>
       <input
