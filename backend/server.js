@@ -207,6 +207,54 @@ app.get("/pnl", async (req, res) => {
   res.json(out);
 });
 
+//-----------DASHBOARD-------------------
+app.get("/dashboard", async (req, res) => {
+  try {
+    const user = await User.findOne();
+    const transactions = await Transaction.find().sort({ _id: -1 });
+
+    if (!user) {
+      return res.status(404).json({ error: "User not found" });
+    }
+
+    let portfolio = user.portfolio || {};
+    let pnl = {};
+    let holdingsValue = 0;
+
+    for (let stock in portfolio) {
+      const data = portfolio[stock];
+      const currentPrice = prices[stock];
+
+      if (!currentPrice) continue;
+
+      const value = data.quantity * currentPrice;
+      holdingsValue += value;
+
+      pnl[stock] = {
+        quantity: data.quantity,
+        avgPrice: data.avgPrice,
+        currentPrice,
+        pnl: Number(((currentPrice - data.avgPrice) * data.quantity).toFixed(2)),
+        value: Number(value.toFixed(2))
+      };
+    }
+
+    const totalValue = holdingsValue + user.balance;
+
+    res.json({
+      balance: user.balance,
+      holdingsValue: Number(holdingsValue.toFixed(2)),
+      totalValue: Number(totalValue.toFixed(2)),
+      portfolio,
+      pnl,
+      transactions
+    });
+
+  } catch (err) {
+    res.status(500).json({ error: "Dashboard failed" });
+  }
+});
+
 // ---------------- INIT ----------------
 
 async function initUser() {

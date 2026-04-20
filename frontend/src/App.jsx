@@ -12,7 +12,7 @@ function App() {
   const [loadingStock, setLoadingStock] = useState(null);
   const [error, setError] = useState(null);
 
-  // 🔒 REAL ANTI-SPAM LOCK (IMPORTANT)
+  // REAL ANTI-SPAM LOCK (IMPORTANT)
   const lockRef = useRef(false);
 
   // ---------------- FETCH ----------------
