@@ -22,7 +22,6 @@ function App() {
   const lockRef = useRef(false);
 
   // ---------------- FETCH DASHBOARD ----------------
-
   const fetchDashboard = async () => {
     try {
       const res = await fetch("http://localhost:5000/dashboard");
@@ -34,7 +33,6 @@ function App() {
   };
 
   // ---------------- FETCH PRICES ----------------
-
   const fetchPrices = async () => {
     try {
       const res = await fetch("http://localhost:5000/prices");
@@ -51,6 +49,18 @@ function App() {
     }
   };
 
+  // ---------------- FETCH VALUE HISTORY ----------------
+  const fetchValueHistory = async () => {
+    try {
+      const res = await fetch("http://localhost:5000/history/value");
+      const data = await res.json();
+      setValueHistory(data);
+    } catch {
+      setError("History load failed");
+    }
+  };
+
+  // ---------------- INITIAL LOAD ----------------
   useEffect(() => {
     fetchDashboard();
     fetchPrices();
@@ -66,7 +76,6 @@ function App() {
   }, []);
 
   // ---------------- TRADE ----------------
-
   const trade = async (type, stock) => {
     if (lockRef.current) return;
 
@@ -84,9 +93,11 @@ function App() {
 
       const data = await res.json();
 
-      if (data.error) setError(data.error);
-
-      await fetchDashboard();
+      if (data.error) {
+        setError(data.error);
+      } else {
+        await fetchDashboard();
+      }
 
     } catch {
       setError(`${type} failed`);
@@ -101,7 +112,6 @@ function App() {
   const handleSell = (stock) => trade("sell", stock);
 
   // ---------------- CLEAR HISTORY ----------------
-
   const clearHistory = async () => {
     await fetch("http://localhost:5000/history", {
       method: "DELETE"
@@ -109,121 +119,114 @@ function App() {
     fetchDashboard();
   };
 
-  //---------------- FETCH VALUE HISTORY ----------------
-
-  const fetchValueHistory = async () => {
-  try {
-    const res = await fetch("http://localhost:5000/history/value");
-    const data = await res.json();
-    setValueHistory(data);
-  } catch {
-    setError("History load failed");
-  }
-};
-
   // ---------------- UI ----------------
-
   return (
-  <div className="container">
-    <h1>TradeArena</h1>
+    <div className="container">
+      <h1>TradeArena</h1>
 
-    {error && <p className="red">{error}</p>}
+      {error && <p className="red">{error}</p>}
 
-    {/* ACCOUNT */}
-    <div className="card">
-      <h2>Account</h2>
-      {dashboard && (
-        <div className="row">
-          <div className="col">Balance: ₹{dashboard.balance.toFixed(2)}</div>
-          <div className="col">Holdings: ₹{dashboard.holdingsValue.toFixed(2)}</div>
-          <div className="col"><b>Total: ₹{dashboard.totalValue.toFixed(2)}</b></div>
-        </div>
-      )}
-    </div>
-
-    {/* GRAPH */}
-    <div className="card">
-      <h2>Portfolio Growth</h2>
-      <ResponsiveContainer width="100%" height={300}>
-        <LineChart data={valueHistory}>
-          <XAxis dataKey="timestamp" hide />
-          <YAxis />
-          <Tooltip />
-          <Line type="monotone" dataKey="totalValue" stroke="#00e676" />
-        </LineChart>
-      </ResponsiveContainer>
-    </div>
-
-    {/* TRADE */}
-    <div className="card">
-      <h2>Trade</h2>
-
-      <input
-        type="number"
-        min="1"
-        value={quantity}
-        onChange={(e) => setQuantity(Number(e.target.value))}
-      />
-
-      {stocks.map((s) => (
-        <div key={s.name}>
-          {s.name}: ₹{Number(s.price).toFixed(2)}
-
-          <button disabled={loading} onClick={() => handleBuy(s.name)}>
-            Buy
-          </button>
-
-          <button disabled={loading} onClick={() => handleSell(s.name)}>
-            Sell
-          </button>
-        </div>
-      ))}
-    </div>
-
-    {/* PORTFOLIO */}
-    <div className="card">
-      <h2>Portfolio</h2>
-
-      {dashboard?.portfolio &&
-        Object.entries(dashboard.portfolio).map(([stock, data]) => (
-          <div key={stock}>
-            {stock} → {data.quantity} @ ₹{data.avgPrice.toFixed(2)}
+      {/* ACCOUNT */}
+      <div className="card">
+        <h2>Account</h2>
+        {dashboard && (
+          <div className="row">
+            <div className="col">Balance: ₹{dashboard.balance.toFixed(2)}</div>
+            <div className="col">Holdings: ₹{dashboard.holdingsValue.toFixed(2)}</div>
+            <div className="col">
+              <b>Total: ₹{dashboard.totalValue.toFixed(2)}</b>
+            </div>
           </div>
-        ))}
-    </div>
+        )}
+      </div>
 
-    {/* PNL */}
-    <div className="card">
-      <h2>PnL</h2>
+      {/* GRAPH */}
+      <div className="card">
+        <h2>Portfolio Growth</h2>
+        {valueHistory.length > 0 ? (
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={valueHistory}>
+              <XAxis dataKey="timestamp" hide />
+              <YAxis />
+              <Tooltip />
+              <Line type="monotone" dataKey="totalValue" stroke="#00e676" />
+            </LineChart>
+          </ResponsiveContainer>
+        ) : (
+          <p>No data yet</p>
+        )}
+      </div>
 
-      {dashboard?.pnl &&
-        Object.entries(dashboard.pnl).map(([stock, data]) => (
-          <div key={stock}>
-            {stock} → 
-            <span className={data.pnl >= 0 ? "green" : "red"}>
-              ₹{data.pnl}
-            </span>
-          </div>
-        ))}
-    </div>
+      {/* TRADE */}
+      <div className="card">
+        <h2>Trade</h2>
 
-    {/* TRANSACTIONS */}
-    <div className="card">
-      <h2>
-        Transactions
-        <button onClick={clearHistory}>Clear</button>
-      </h2>
+        <input
+          type="number"
+          min="1"
+          value={quantity}
+          onChange={(e) => setQuantity(Number(e.target.value))}
+        />
 
-      <div style={{ maxHeight: 200, overflowY: "scroll" }}>
-        {dashboard?.transactions?.map((t, i) => (
-          <div key={i}>
-            [{t.type}] {t.stock} x{t.quantity} @ ₹{t.price}
+        {stocks.map((s) => (
+          <div key={s.name}>
+            {s.name}: ₹{Number(s.price).toFixed(2)}
+
+            <button disabled={loading} onClick={() => handleBuy(s.name)}>
+              {loadingStock === s.name ? "..." : "Buy"}
+            </button>
+
+            <button disabled={loading} onClick={() => handleSell(s.name)}>
+              {loadingStock === s.name ? "..." : "Sell"}
+            </button>
           </div>
         ))}
       </div>
+
+      {/* PORTFOLIO */}
+      <div className="card">
+        <h2>Portfolio</h2>
+
+        {dashboard?.portfolio &&
+          Object.entries(dashboard.portfolio).map(([stock, data]) => (
+            <div key={stock}>
+              {stock} → {data.quantity} @ ₹{data.avgPrice.toFixed(2)}
+            </div>
+          ))}
+      </div>
+
+      {/* PNL */}
+      <div className="card">
+        <h2>PnL</h2>
+
+        {dashboard?.pnl &&
+          Object.entries(dashboard.pnl).map(([stock, data]) => (
+            <div key={stock}>
+              {stock} →{" "}
+              <span className={data.pnl >= 0 ? "green" : "red"}>
+                ₹{data.pnl}
+              </span>
+            </div>
+          ))}
+      </div>
+
+      {/* TRANSACTIONS */}
+      <div className="card">
+        <h2>
+          Transactions
+          <button onClick={clearHistory}>Clear</button>
+        </h2>
+
+        <div style={{ maxHeight: 200, overflowY: "scroll" }}>
+          {dashboard?.transactions?.map((t, i) => (
+            <div key={i}>
+              [{t.type}] {t.stock} x{t.quantity} @ ₹{t.price}
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
-  </div>
-);
+  );
 }
 
 export default App;
