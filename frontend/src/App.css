@@ -1,74 +1,97 @@
 body {
   margin: 0;
-  background: #0f172a;
-  color: #e2e8f0;
-  font-family: Arial, sans-serif;
+  background: #0b1220;
+  color: #e5e7eb;
+  font-family: "Inter", sans-serif;
 }
 
 .container {
-  max-width: 1100px;
-  margin: auto;
   padding: 20px;
 }
 
-h1 {
-  text-align: center;
-  margin-bottom: 20px;
+/* GRID LAYOUT */
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  gap: 20px;
 }
 
+.bottom-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+}
+
+/* CARD */
 .card {
-  background: #1e293b;
-  padding: 15px;
-  border-radius: 10px;
-  margin-bottom: 20px;
-  box-shadow: 0 0 10px rgba(0,0,0,0.3);
+  background: #111827;
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid #1f2937;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.3);
 }
 
-.row {
+/* TEXT */
+h1 {
+  margin-bottom: 20px;
+}
+
+h2 {
+  margin-bottom: 10px;
+}
+
+/* TRADE ROW */
+.trade-row {
   display: flex;
   justify-content: space-between;
-  flex-wrap: wrap;
+  align-items: center;
+  padding: 6px 0;
 }
 
-.col {
-  margin: 5px 0;
+/* BUTTONS */
+button {
+  margin-left: 6px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
 }
 
-input {
-  padding: 6px;
-  margin-bottom: 10px;
-  width: 80px;
-  background: #0f172a;
-  border: 1px solid #334155;
+.buy {
+  background: #16a34a;
   color: white;
 }
 
-button {
-  margin-left: 8px;
-  padding: 5px 10px;
-  border: none;
-  border-radius: 5px;
-  cursor: pointer;
+.sell {
+  background: #dc2626;
+  color: white;
 }
 
 button:hover {
   opacity: 0.85;
 }
 
-button:nth-child(2) {
-  background: #22c55e;
-  color: black;
-}
-
-button:nth-child(3) {
-  background: #ef4444;
+/* INPUT */
+input {
+  padding: 6px;
+  background: #020617;
+  border: 1px solid #334155;
   color: white;
+  border-radius: 6px;
 }
 
+/* COLORS */
 .green {
   color: #22c55e;
 }
 
 .red {
   color: #ef4444;
+}
+
+/* SCROLL BOX */
+.scroll {
+  max-height: 200px;
+  overflow-y: auto;
 }

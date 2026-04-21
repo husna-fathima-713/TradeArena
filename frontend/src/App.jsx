@@ -120,106 +120,97 @@ function App() {
   };
 
   // ---------------- UI ----------------
-  return (
-    <div className="container">
-      <h1>TradeArena</h1>
+// ---------------- UI ----------------
+return (
+  <div className="container">
+    <h1>TradeArena</h1>
 
-      {error && <p className="red">{error}</p>}
+    {error && <p className="red">{error}</p>}
+
+    {/* TOP GRID */}
+    <div className="grid">
 
       {/* ACCOUNT */}
       <div className="card">
         <h2>Account</h2>
-        {dashboard && (
-          <div className="row">
-            <div className="col">Balance: ₹{dashboard.balance.toFixed(2)}</div>
-            <div className="col">Holdings: ₹{dashboard.holdingsValue.toFixed(2)}</div>
-            <div className="col">
-              <b>Total: ₹{dashboard.totalValue.toFixed(2)}</b>
-            </div>
-          </div>
+        {dashboard ? (
+          <>
+            <p>Balance: ₹{dashboard.balance.toFixed(2)}</p>
+            <p>Holdings: ₹{dashboard.holdingsValue.toFixed(2)}</p>
+            <h3>Total: ₹{dashboard.totalValue.toFixed(2)}</h3>
+          </>
+        ) : (
+          <p>Loading...</p>
         )}
       </div>
 
       {/* GRAPH */}
       <div className="card">
-        <h2>Portfolio Growth</h2>
-        {valueHistory.length > 0 ? (
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={valueHistory}>
-              <XAxis dataKey="timestamp" hide />
-              <YAxis />
-              <Tooltip />
-              <Line type="monotone" dataKey="totalValue" stroke="#00e676" />
-            </LineChart>
-          </ResponsiveContainer>
-        ) : (
-          <p>No data yet</p>
-        )}
+        <h2>Performance</h2>
+        <ResponsiveContainer width="100%" height={300}>
+          <LineChart data={valueHistory}>
+            <XAxis dataKey="timestamp" hide />
+            <YAxis />
+            <Tooltip />
+            <Line type="monotone" dataKey="totalValue" stroke="#22c55e" />
+          </LineChart>
+        </ResponsiveContainer>
       </div>
 
-      <div className="card">
-  <h2>Trade</h2>
-
-  <input
-    type="number"
-    min="1"
-    value={quantity}
-    onChange={(e) => setQuantity(Number(e.target.value))}
-  />
-
-  {stocks.map((s) => (
-    <div
-      key={s.name}
-      className="row"
-      style={{ alignItems: "center", marginBottom: "8px" }}
-    >
-      <div>
-        {s.name}: ₹{Number(s.price).toFixed(2)}
-      </div>
-
-      <div>
-        <button
-          onClick={() => handleBuy(s.name)}
-          disabled={loading}
-        >
-          {loadingStock === s.name ? "..." : "Buy"}
-        </button>
-
-        <button
-          onClick={() => handleSell(s.name)}
-          disabled={loading}
-        >
-          {loadingStock === s.name ? "..." : "Sell"}
-        </button>
-      </div>
     </div>
-  ))}
-</div>
+
+    {/* BOTTOM GRID */}
+    <div className="bottom-grid">
+
+      {/* TRADE */}
+      <div className="card">
+        <h2>Trade</h2>
+
+        <input
+          type="number"
+          min="1"
+          value={quantity}
+          onChange={(e) => setQuantity(Number(e.target.value))}
+        />
+
+        {stocks.map((s) => (
+          <div key={s.name} className="trade-row">
+            <span>{s.name}: ₹{s.price}</span>
+
+            <div>
+              <button className="buy" onClick={() => handleBuy(s.name)}>
+                Buy
+              </button>
+              <button className="sell" onClick={() => handleSell(s.name)}>
+                Sell
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
 
       {/* PORTFOLIO */}
       <div className="card">
         <h2>Portfolio</h2>
-
         {dashboard?.portfolio &&
-          Object.entries(dashboard.portfolio).map(([stock, data]) => (
-            <div key={stock}>
-              {stock} → {data.quantity} @ ₹{data.avgPrice.toFixed(2)}
-            </div>
+          Object.entries(dashboard.portfolio).map(([s, d]) => (
+            <p key={s}>
+              {s}: {d.quantity} @ ₹{d.avgPrice.toFixed(2)}
+            </p>
           ))}
       </div>
 
       {/* PNL */}
       <div className="card">
         <h2>PnL</h2>
-
         {dashboard?.pnl &&
-          Object.entries(dashboard.pnl).map(([stock, data]) => (
-            <div key={stock}>
-              {stock} →{" "}
-              <span className={data.pnl >= 0 ? "green" : "red"}>
-                ₹{data.pnl}
+          Object.entries(dashboard.pnl).map(([s, d]) => (
+            <p key={s}>
+              {s}:{" "}
+              <span className={d.pnl >= 0 ? "green" : "red"}>
+                ₹{d.pnl}
               </span>
-            </div>
+            </p>
           ))}
       </div>
 
@@ -230,16 +221,18 @@ function App() {
           <button onClick={clearHistory}>Clear</button>
         </h2>
 
-        <div style={{ maxHeight: 200, overflowY: "scroll" }}>
+        <div className="scroll">
           {dashboard?.transactions?.map((t, i) => (
-            <div key={i}>
-              [{t.type}] {t.stock} x{t.quantity} @ ₹{t.price}
-            </div>
+            <p key={i}>
+              [{t.type}] {t.stock} x{t.quantity}
+            </p>
           ))}
         </div>
       </div>
+
     </div>
-  );
+  </div>
+);
 }
 
 export default App;
