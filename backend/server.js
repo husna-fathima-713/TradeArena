@@ -1,3 +1,4 @@
+require("dotenv").config();
 const ValueSnapshot = require("./models/ValueSnapshot");
 const lastTradeTime = {}; // simple in-memory cooldown
 const COOLDOWN_MS = 1500; // 1.5 sec per stock per user
@@ -14,6 +15,12 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+mongoose.connect(process.env.MONGO_URI)
+  .then(() => console.log("MongoDB connected"))
+  .catch(err => {
+    console.error("Mongo Error:", err.message);
+    process.exit(1);
+  });
 // ---------------- PRICE ENGINE ----------------
 
 let prices = {
@@ -58,8 +65,6 @@ setInterval(async () => {
 
 // ---------------- DB ----------------
 
-mongoose.connect("mongodb://127.0.0.1:27017/tradearena")
-  .then(() => console.log("MongoDB connected"));
 
 // ---------------- BUY ----------------
 
