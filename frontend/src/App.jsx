@@ -157,31 +157,44 @@ function App() {
         )}
       </div>
 
-      {/* TRADE */}
       <div className="card">
-        <h2>Trade</h2>
+  <h2>Trade</h2>
 
-        <input
-          type="number"
-          min="1"
-          value={quantity}
-          onChange={(e) => setQuantity(Number(e.target.value))}
-        />
+  <input
+    type="number"
+    min="1"
+    value={quantity}
+    onChange={(e) => setQuantity(Number(e.target.value))}
+  />
 
-        {stocks.map((s) => (
-          <div key={s.name}>
-            {s.name}: ₹{Number(s.price).toFixed(2)}
-
-            <button disabled={loading} onClick={() => handleBuy(s.name)}>
-              {loadingStock === s.name ? "..." : "Buy"}
-            </button>
-
-            <button disabled={loading} onClick={() => handleSell(s.name)}>
-              {loadingStock === s.name ? "..." : "Sell"}
-            </button>
-          </div>
-        ))}
+  {stocks.map((s) => (
+    <div
+      key={s.name}
+      className="row"
+      style={{ alignItems: "center", marginBottom: "8px" }}
+    >
+      <div>
+        {s.name}: ₹{Number(s.price).toFixed(2)}
       </div>
+
+      <div>
+        <button
+          onClick={() => handleBuy(s.name)}
+          disabled={loading}
+        >
+          {loadingStock === s.name ? "..." : "Buy"}
+        </button>
+
+        <button
+          onClick={() => handleSell(s.name)}
+          disabled={loading}
+        >
+          {loadingStock === s.name ? "..." : "Sell"}
+        </button>
+      </div>
+    </div>
+  ))}
+</div>
 
       {/* PORTFOLIO */}
       <div className="card">
