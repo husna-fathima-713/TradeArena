@@ -1,3 +1,4 @@
+import Login from "./Login";
 import { useEffect, useState, useRef } from "react";
 import {
   LineChart,
@@ -16,21 +17,39 @@ function App() {
 
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(false);
-  const [loadingStock, setLoadingStock] = useState(null);
   const [error, setError] = useState(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(
+    !!localStorage.getItem("userId")
+  );
 
   const lockRef = useRef(false);
 
+  // ---------------- USER INIT ----------------
+ const getUserId = () => {
+  return localStorage.getItem("userId");
+};
   // ---------------- FETCH DASHBOARD ----------------
   const fetchDashboard = async () => {
-    try {
-      const res = await fetch("http://localhost:5000/dashboard");
-      const data = await res.json();
-      setDashboard(data);
-    } catch {
-      setError("Dashboard failed");
+  const userId = getUserId();
+  if (!userId) return;
+
+  try {
+    const res = await fetch(
+      `http://localhost:5000/dashboard?userId=${userId}`
+    );
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      setError(data.error || "Dashboard failed");
+      return;
     }
-  };
+
+    setDashboard(data);
+  } catch {
+    setError("Server not reachable");
+  }
+};
 
   // ---------------- FETCH PRICES ----------------
   const fetchPrices = async () => {
@@ -49,7 +68,7 @@ function App() {
     }
   };
 
-  // ---------------- FETCH VALUE HISTORY ----------------
+  // ---------------- FETCH HISTORY ----------------
   const fetchValueHistory = async () => {
     try {
       const res = await fetch("http://localhost:5000/history/value");
@@ -81,14 +100,17 @@ function App() {
 
     lockRef.current = true;
     setLoading(true);
-    setLoadingStock(stock);
     setError(null);
 
     try {
       const res = await fetch(`http://localhost:5000/${type}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stock, quantity })
+        body: JSON.stringify({
+          stock,
+          quantity,
+          userId: getUserId()
+        })
       });
 
       const data = await res.json();
@@ -105,12 +127,13 @@ function App() {
 
     lockRef.current = false;
     setLoading(false);
-    setLoadingStock(null);
   };
 
   const handleBuy = (stock) => trade("buy", stock);
   const handleSell = (stock) => trade("sell", stock);
-
+  const handleLogin = () => {
+    setIsLoggedIn(true);
+  };
   // ---------------- CLEAR HISTORY ----------------
   const clearHistory = async () => {
     await fetch("http://localhost:5000/history", {
@@ -120,17 +143,22 @@ function App() {
   };
 
   // ---------------- UI ----------------
-// ---------------- UI ----------------
-return (
+  return isLoggedIn ? (
   <div className="container">
     <h1>TradeArena</h1>
 
+    <button
+      onClick={() => {
+      localStorage.removeItem("userId");
+      window.location.reload();
+    }}
+    >
+      Logout
+    </button>
+
     {error && <p className="red">{error}</p>}
 
-    {/* TOP GRID */}
     <div className="grid">
-
-      {/* ACCOUNT */}
       <div className="card">
         <h2>Account</h2>
         {dashboard ? (
@@ -144,7 +172,6 @@ return (
         )}
       </div>
 
-      {/* GRAPH */}
       <div className="card">
         <h2>Performance</h2>
         <ResponsiveContainer width="100%" height={300}>
@@ -156,13 +183,9 @@ return (
           </LineChart>
         </ResponsiveContainer>
       </div>
-
     </div>
 
-    {/* BOTTOM GRID */}
     <div className="bottom-grid">
-
-      {/* TRADE */}
       <div className="card">
         <h2>Trade</h2>
 
@@ -189,7 +212,6 @@ return (
         ))}
       </div>
 
-      {/* PORTFOLIO */}
       <div className="card">
         <h2>Portfolio</h2>
         {dashboard?.portfolio &&
@@ -200,7 +222,6 @@ return (
           ))}
       </div>
 
-      {/* PNL */}
       <div className="card">
         <h2>PnL</h2>
         {dashboard?.pnl &&
@@ -214,7 +235,6 @@ return (
           ))}
       </div>
 
-      {/* TRANSACTIONS */}
       <div className="card">
         <h2>
           Transactions
@@ -229,9 +249,10 @@ return (
           ))}
         </div>
       </div>
-
     </div>
   </div>
+) : (
+  <Login onLogin={handleLogin} />
 );
 }
 
