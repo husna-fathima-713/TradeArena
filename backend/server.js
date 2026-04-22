@@ -1,4 +1,5 @@
 require("dotenv").config();
+const bcrypt = require("bcryptjs");
 const ValueSnapshot = require("./models/ValueSnapshot");
 const lastTradeTime = {}; // simple in-memory cooldown
 const COOLDOWN_MS = 1500; // 1.5 sec per stock per user
@@ -63,8 +64,39 @@ setInterval(async () => {
   }
 }, 5000);
 
-// ---------------- DB ----------------
+// ---------------- REGISTER ----------------
+app.post("/register", async (req, res) => {
+  const { username, password } = req.body;
 
+  const hashed = await bcrypt.hash(password, 10);
+
+  try {
+    await User.create({
+      username,
+      password: hashed,
+      balance: 10000,
+      portfolio: {}
+    });
+
+    res.json({ ok: true });
+  } catch {
+    res.status(400).json({ error: "User exists" });
+  }
+});
+
+//-----------------LOGIN ----------------
+
+app.post("/login", async (req, res) => {
+  const { username, password } = req.body;
+
+  const user = await User.findOne({ username });
+  if (!user) return res.status(400).json({ error: "No user" });
+
+  const valid = await bcrypt.compare(password, user.password);
+  if (!valid) return res.status(400).json({ error: "Wrong password" });
+
+  res.json({ ok: true, userId: user._id });
+});
 
 // ---------------- BUY ----------------
 
@@ -297,11 +329,5 @@ app.get("/history/value", async (req, res) => {
 
 // ---------------- INIT ----------------
 
-async function initUser() {
-  await User.deleteMany({});
-  await User.create({ balance: 10000, portfolio: {} });
-}
 
 app.listen(5000, () => console.log("Server running"));
-
-initUser();
