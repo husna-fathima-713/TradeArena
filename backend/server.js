@@ -102,28 +102,24 @@ app.post("/login", async (req, res) => {
 
 app.post("/buy", async (req, res) => {
   try {
-    const { stock, quantity } = req.body;
+    const { stock, quantity, userId } = req.body;
     const qty = Number(quantity);
 
     if (!stock || !qty || qty <= 0) {
       return res.status(400).json({ error: "Invalid input" });
     }
 
-    // ---------------- RULE 1: MAX ORDER LIMIT ----------------
     if (qty > MAX_QTY_PER_TRADE) {
       return res.status(400).json({
         error: `Max ${MAX_QTY_PER_TRADE} per order`
       });
     }
 
-    // ---------------- RULE 2: COOLDOWN ----------------
     const now = Date.now();
-    const key = `${stock}_buy`;
+    const key = `${userId}_${stock}_buy`;
 
     if (lastTradeTime[key] && now - lastTradeTime[key] < COOLDOWN_MS) {
-      return res.status(429).json({
-        error: "Slow down. Trading cooldown active."
-      });
+      return res.status(429).json({ error: "Cooldown active" });
     }
 
     lastTradeTime[key] = now;
@@ -131,8 +127,9 @@ app.post("/buy", async (req, res) => {
     const price = prices[stock];
     if (!price) return res.status(400).json({ error: "Invalid stock" });
 
-    const user = await User.findOne();
-    if (!user) return res.status(404).json({ error: "User missing" });
+    // SINGLE user fetch. Not twice.
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ error: "User not found" });
 
     if (!user.portfolio) user.portfolio = {};
 
@@ -159,6 +156,7 @@ app.post("/buy", async (req, res) => {
     await user.save();
 
     await Transaction.create({
+      userId,
       type: "BUY",
       stock,
       quantity: qty,
@@ -176,7 +174,7 @@ app.post("/buy", async (req, res) => {
 
 app.post("/sell", async (req, res) => {
   try {
-    const { stock, quantity } = req.body;
+    const { stock, quantity, userId } = req.body;
     const qty = Number(quantity);
 
     if (!stock || !qty || qty <= 0) {
@@ -187,8 +185,8 @@ app.post("/sell", async (req, res) => {
       return res.status(400).json({ error: "Max limit exceeded" });
     }
 
-    const key = `${stock}_sell`;
     const now = Date.now();
+    const key = `${userId}_${stock}_sell`;
 
     if (lastTradeTime[key] && now - lastTradeTime[key] < COOLDOWN_MS) {
       return res.status(429).json({ error: "Cooldown active" });
@@ -197,7 +195,10 @@ app.post("/sell", async (req, res) => {
     lastTradeTime[key] = now;
 
     const price = prices[stock];
-    const user = await User.findOne();
+
+    // SINGLE fetch again
+    const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ error: "User not found" });
 
     if (!user?.portfolio?.[stock]) {
       return res.status(400).json({ error: "No stock" });
@@ -218,6 +219,7 @@ app.post("/sell", async (req, res) => {
     await user.save();
 
     await Transaction.create({
+      userId,
       type: "SELL",
       stock,
       quantity: qty,
@@ -275,8 +277,14 @@ app.get("/pnl", async (req, res) => {
 //-----------DASHBOARD-------------------
 app.get("/dashboard", async (req, res) => {
   try {
-    const user = await User.findOne();
-    const transactions = await Transaction.find().sort({ _id: -1 });
+    const userId = req.query.userId;
+
+    if (!userId) {
+      return res.status(400).json({ error: "Missing userId" });
+    }
+
+    const user = await User.findById(userId);
+    const transactions = await Transaction.find({ userId }).sort({ _id: -1 });
 
     if (!user) {
       return res.status(404).json({ error: "User not found" });
@@ -319,7 +327,6 @@ app.get("/dashboard", async (req, res) => {
     res.status(500).json({ error: "Dashboard failed" });
   }
 });
-
 //---------------- HISTORY SNAPSHOT ----------------
 
 app.get("/history/value", async (req, res) => {
