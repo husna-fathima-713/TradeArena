@@ -14,39 +14,61 @@ function App() {
   const [stocks, setStocks] = useState([]);
   const [dashboard, setDashboard] = useState(null);
   const [valueHistory, setValueHistory] = useState([]);
-
+  const [leaderboard, setLeaderboard] = useState([]);
   const [quantity, setQuantity] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
   const [isLoggedIn, setIsLoggedIn] = useState(
     !!localStorage.getItem("userId")
   );
 
   const lockRef = useRef(false);
 
-  // ---------------- USER INIT ----------------
- const getUserId = () => {
-  return localStorage.getItem("userId");
-};
+  // ---------------- USER ----------------
+  const getUserId = () => {
+    return localStorage.getItem("userId");
+  };
+
   // ---------------- FETCH DASHBOARD ----------------
   const fetchDashboard = async () => {
-  const userId = getUserId();
-  if (!userId) return;
+    const userId = getUserId();
+    if (!userId) return;
 
+    try {
+      const res = await fetch(
+        `http://localhost:5000/dashboard?userId=${userId}`
+      );
+      const data = await res.json();
+
+      if (!res.ok) {
+        setError(data.error || "Dashboard failed");
+        return;
+      }
+
+      setDashboard(data);
+    } catch {
+      setError("Server not reachable");
+    }
+  };
+
+  //---------------- FETCH LEADERBOARD ----------------
+const fetchLeaderboard = async () => {
   try {
-    const res = await fetch(
-      `http://localhost:5000/dashboard?userId=${userId}`
-    );
-
-    const data = await res.json();
+    const res = await fetch("http://localhost:5000/leaderboard");
 
     if (!res.ok) {
-      setError(data.error || "Dashboard failed");
+      setError("Leaderboard API failed");
       return;
     }
 
-    setDashboard(data);
-  } catch {
+    const data = await res.json();
+
+    console.log("LEADERBOARD DATA:", data); // DEBUG
+
+    setLeaderboard(data);
+  } catch (err) {
+    console.log(err);
     setError("Server not reachable");
   }
 };
@@ -81,22 +103,29 @@ function App() {
 
   // ---------------- INITIAL LOAD ----------------
   useEffect(() => {
-    fetchDashboard();
     fetchPrices();
+
+    if (!isLoggedIn) return;
+
+    fetchDashboard();
     fetchValueHistory();
+    fetchLeaderboard();
 
     const interval = setInterval(() => {
       fetchDashboard();
-      fetchPrices();
       fetchValueHistory();
+      fetchLeaderboard();
     }, 5000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [isLoggedIn]);
 
   // ---------------- TRADE ----------------
   const trade = async (type, stock) => {
     if (lockRef.current) return;
+
+    const userId = getUserId();
+    if (!userId) return;
 
     lockRef.current = true;
     setLoading(true);
@@ -105,11 +134,13 @@ function App() {
     try {
       const res = await fetch(`http://localhost:5000/${type}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json"
+        },
         body: JSON.stringify({
           stock,
           quantity,
-          userId: getUserId()
+          userId
         })
       });
 
@@ -131,9 +162,18 @@ function App() {
 
   const handleBuy = (stock) => trade("buy", stock);
   const handleSell = (stock) => trade("sell", stock);
+
   const handleLogin = () => {
     setIsLoggedIn(true);
+    setError(null);
   };
+
+  const handleLogout = () => {
+    localStorage.removeItem("userId");
+    setIsLoggedIn(false);
+    setDashboard(null);
+  };
+
   // ---------------- CLEAR HISTORY ----------------
   const clearHistory = async () => {
     await fetch("http://localhost:5000/history", {
@@ -143,21 +183,15 @@ function App() {
   };
 
   // ---------------- UI ----------------
-  return isLoggedIn ? (
+return isLoggedIn ? (
   <div className="container">
     <h1>TradeArena</h1>
 
-    <button
-      onClick={() => {
-      localStorage.removeItem("userId");
-      window.location.reload();
-    }}
-    >
-      Logout
-    </button>
+    <button onClick={handleLogout}>Logout</button>
 
     {error && <p className="red">{error}</p>}
 
+    {/* TOP */}
     <div className="grid">
       <div className="card">
         <h2>Account</h2>
@@ -179,13 +213,19 @@ function App() {
             <XAxis dataKey="timestamp" hide />
             <YAxis />
             <Tooltip />
-            <Line type="monotone" dataKey="totalValue" stroke="#22c55e" />
+            <Line
+              type="monotone"
+              dataKey="totalValue"
+              stroke="#22c55e"
+            />
           </LineChart>
         </ResponsiveContainer>
       </div>
     </div>
 
+    {/* BOTTOM */}
     <div className="bottom-grid">
+      {/* TRADE */}
       <div className="card">
         <h2>Trade</h2>
 
@@ -193,7 +233,9 @@ function App() {
           type="number"
           min="1"
           value={quantity}
-          onChange={(e) => setQuantity(Number(e.target.value))}
+          onChange={(e) =>
+            setQuantity(Number(e.target.value))
+          }
         />
 
         {stocks.map((s) => (
@@ -201,10 +243,16 @@ function App() {
             <span>{s.name}: ₹{s.price}</span>
 
             <div>
-              <button className="buy" onClick={() => handleBuy(s.name)}>
+              <button
+                className="buy"
+                onClick={() => handleBuy(s.name)}
+              >
                 Buy
               </button>
-              <button className="sell" onClick={() => handleSell(s.name)}>
+              <button
+                className="sell"
+                onClick={() => handleSell(s.name)}
+              >
                 Sell
               </button>
             </div>
@@ -212,33 +260,46 @@ function App() {
         ))}
       </div>
 
+      {/* PORTFOLIO */}
       <div className="card">
         <h2>Portfolio</h2>
         {dashboard?.portfolio &&
-          Object.entries(dashboard.portfolio).map(([s, d]) => (
-            <p key={s}>
-              {s}: {d.quantity} @ ₹{d.avgPrice.toFixed(2)}
-            </p>
-          ))}
+          Object.entries(dashboard.portfolio).map(
+            ([s, d]) => (
+              <p key={s}>
+                {s}: {d.quantity} @ ₹{d.avgPrice.toFixed(2)}
+              </p>
+            )
+          )}
       </div>
 
+      {/* PNL */}
       <div className="card">
         <h2>PnL</h2>
         {dashboard?.pnl &&
-          Object.entries(dashboard.pnl).map(([s, d]) => (
-            <p key={s}>
-              {s}:{" "}
-              <span className={d.pnl >= 0 ? "green" : "red"}>
-                ₹{d.pnl}
-              </span>
-            </p>
-          ))}
+          Object.entries(dashboard.pnl).map(
+            ([s, d]) => (
+              <p key={s}>
+                {s}:{" "}
+                <span
+                  className={
+                    d.pnl >= 0 ? "green" : "red"
+                  }
+                >
+                  ₹{d.pnl}
+                </span>
+              </p>
+            )
+          )}
       </div>
 
+      {/* TRANSACTIONS */}
       <div className="card">
         <h2>
           Transactions
-          <button onClick={clearHistory}>Clear</button>
+          <button onClick={clearHistory}>
+            Clear
+          </button>
         </h2>
 
         <div className="scroll">
@@ -248,6 +309,23 @@ function App() {
             </p>
           ))}
         </div>
+      </div>
+
+      {/* LEADERBOARD */}
+      <div className="card">
+        <h2>Leaderboard</h2>
+
+        {!leaderboard ? (
+          <p>Loading...</p>
+        ) : leaderboard.length === 0 ? (
+          <p>No users</p>
+        ) : (
+          leaderboard.map((u, i) => (
+            <p key={i}>
+              #{i + 1} {u.username} → ₹{u.totalValue.toFixed(2)}
+            </p>
+          ))
+        )}
       </div>
     </div>
   </div>
