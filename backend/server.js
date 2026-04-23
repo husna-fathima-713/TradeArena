@@ -327,6 +327,40 @@ app.get("/dashboard", async (req, res) => {
     res.status(500).json({ error: "Dashboard failed" });
   }
 });
+
+// ----------- LEADERBOARD ----------------
+app.get("/leaderboard", async (req, res) => {
+  try {
+    const users = await User.find();
+
+    const leaderboard = users.map((user) => {
+      let holdingsValue = 0;
+
+      for (let stock in (user.portfolio || {})) {
+        const data = user.portfolio[stock];
+        const price = prices[stock];
+        if (!price) continue;
+
+        holdingsValue += data.quantity * price;
+      }
+
+      const totalValue = holdingsValue + user.balance;
+
+      return {
+        username: user.username || "anonymous",
+        totalValue: Number(totalValue.toFixed(2))
+      };
+    });
+
+    leaderboard.sort((a, b) => b.totalValue - a.totalValue);
+
+    res.json(leaderboard);
+
+  } catch {
+    res.status(500).json({ error: "Leaderboard failed" });
+  }
+});
+
 //---------------- HISTORY SNAPSHOT ----------------
 
 app.get("/history/value", async (req, res) => {
