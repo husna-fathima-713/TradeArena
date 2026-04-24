@@ -313,20 +313,38 @@ return isLoggedIn ? (
 
       {/* LEADERBOARD */}
       <div className="card">
-        <h2>Leaderboard</h2>
+  <h2>Leaderboard</h2>
 
-        {!leaderboard ? (
-          <p>Loading...</p>
-        ) : leaderboard.length === 0 ? (
-          <p>No users</p>
-        ) : (
-          leaderboard.map((u, i) => (
-            <p key={i}>
-              #{i + 1} {u.username} → ₹{u.totalValue.toFixed(2)}
-            </p>
-          ))
-        )}
-      </div>
+  {leaderboard.length === 0 ? (
+    <p>No users</p>
+  ) : (
+    leaderboard.map((u, i) => {
+      const currentUserId = localStorage.getItem("userId");
+      const isCurrentUser = u.username === dashboard?.username;
+
+      return (
+        <p
+          key={i}
+          style={{
+            fontWeight: i < 3 ? "bold" : "normal",
+            color:
+              i === 0
+                ? "#facc15"
+                : i === 1
+                ? "#cbd5f5"
+                : i === 2
+                ? "#f97316"
+                : isCurrentUser
+                ? "#22c55e"
+                : "#e2e8f0"
+          }}
+        >
+          #{i + 1} {u.username} → ₹{u.totalValue.toFixed(2)}
+        </p>
+      );
+    })
+  )}
+</div>
     </div>
   </div>
 ) : (
