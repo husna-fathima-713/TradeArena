@@ -9,7 +9,7 @@ const cors = require("cors");
 const mongoose = require("mongoose");
 
 const User = require("./models/user");
-const Transaction = require("./models/transaction");
+const Transaction = require("./models/Transaction");
 
 const app = express();
 
