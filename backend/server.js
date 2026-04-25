@@ -8,8 +8,8 @@ const express = require("express");
 const cors = require("cors");
 const mongoose = require("mongoose");
 
-const User = require("./models/User");
-const Transaction = require("./models/Transaction");
+const User = require("./models/user");
+const Transaction = require("./models/transaction");
 
 const app = express();
 
