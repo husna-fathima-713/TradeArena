@@ -10,7 +10,6 @@ import {
 } from "recharts";
 import "./App.css";
 
-// ✅ CENTRALIZED BACKEND URL
 const API_URL = "https://tradearena-1.onrender.com";
 
 function App() {
@@ -19,7 +18,6 @@ function App() {
   const [valueHistory, setValueHistory] = useState([]);
   const [leaderboard, setLeaderboard] = useState([]);
   const [quantity, setQuantity] = useState(1);
-  const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
 
   const [isLoggedIn, setIsLoggedIn] = useState(
@@ -32,93 +30,63 @@ function App() {
 
   // ---------------- DASHBOARD ----------------
   const fetchDashboard = async () => {
-  const userId = localStorage.getItem("userId");
+    const userId = getUserId();
+    if (!userId) return;
 
-  if (!userId) {
-    console.log("NO USER ID");
-    return;
-  }
+    try {
+      const res = await fetch(`${API_URL}/dashboard?userId=${userId}`);
+      const data = await res.json();
 
-  try {
-    const res = await fetch(
-      `https://tradearena-1.onrender.com/dashboard?userId=${userId}`
-    );
+      console.log("DASHBOARD:", data);
 
+      setDashboard(data);
+    } catch {
+      setError("Dashboard failed");
+    }
+  };
+
+  // ---------------- OTHER FETCHES ----------------
+  const fetchLeaderboard = async () => {
+    const res = await fetch(`${API_URL}/leaderboard`);
+    const data = await res.json();
+    setLeaderboard(data);
+  };
+
+  const fetchPrices = async () => {
+    const res = await fetch(`${API_URL}/prices`);
     const data = await res.json();
 
-    console.log("DASHBOARD DATA:", data);
+    const formatted = Object.entries(data).map(([name, price]) => ({
+      name,
+      price
+    }));
 
-    setDashboard(data);
-  } catch (err) {
-    console.log(err);
-    setError("Dashboard failed");
-  }
-};
-
-  // ---------------- LEADERBOARD ----------------
-  const fetchLeaderboard = async () => {
-    try {
-      const res = await fetch(`${API_URL}/leaderboard`);
-
-      if (!res.ok) {
-        setError("Leaderboard API failed");
-        return;
-      }
-
-      const data = await res.json();
-      setLeaderboard(data);
-    } catch {
-      setError("Server not reachable");
-    }
+    setStocks(formatted);
   };
 
-  // ---------------- PRICES ----------------
-  const fetchPrices = async () => {
-    try {
-      const res = await fetch(`${API_URL}/prices`);
-      const data = await res.json();
-
-      const formatted = Object.entries(data).map(([name, price]) => ({
-        name,
-        price
-      }));
-
-      setStocks(formatted);
-    } catch {
-      setError("Price fetch failed");
-    }
-  };
-
-  // ---------------- HISTORY ----------------
   const fetchValueHistory = async () => {
-    try {
-      const res = await fetch(`${API_URL}/history/value`);
-      const data = await res.json();
-      setValueHistory(data);
-    } catch {
-      setError("History load failed");
-    }
+    const res = await fetch(`${API_URL}/history/value`);
+    const data = await res.json();
+    setValueHistory(data);
   };
 
-  // ---------------- INITIAL LOAD ----------------
-  const userId = localStorage.getItem("userId");
+  // ---------------- LOAD ----------------
+  useEffect(() => {
+    const userId = getUserId();
+    if (!userId) return;
 
-useEffect(() => {
-  if (!userId) return;
-
-  fetchDashboard();
-  fetchValueHistory();
-  fetchLeaderboard();
-  fetchPrices();
-
-  const interval = setInterval(() => {
     fetchDashboard();
-    fetchValueHistory();
+    fetchPrices();
     fetchLeaderboard();
-  }, 5000);
+    fetchValueHistory();
 
-  return () => clearInterval(interval);
-}, [userId]);
+    const interval = setInterval(() => {
+      fetchDashboard();
+      fetchLeaderboard();
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [isLoggedIn]);
 
   // ---------------- TRADE ----------------
   const trade = async (type, stock) => {
@@ -128,8 +96,6 @@ useEffect(() => {
     if (!userId) return;
 
     lockRef.current = true;
-    setLoading(true);
-    setError(null);
 
     try {
       const res = await fetch(`${API_URL}/${type}`, {
@@ -137,49 +103,29 @@ useEffect(() => {
         headers: {
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({
-          stock,
-          quantity,
-          userId
-        })
+        body: JSON.stringify({ stock, quantity, userId })
       });
 
       const data = await res.json();
 
-      if (data.error) {
-        setError(data.error);
-      } else {
-        await fetchDashboard();
+      if (!data.error) {
+        fetchDashboard();
       }
-
     } catch {
-      setError(`${type} failed`);
+      setError("Trade failed");
     }
 
     lockRef.current = false;
-    setLoading(false);
   };
-
-  const handleBuy = (stock) => trade("buy", stock);
-  const handleSell = (stock) => trade("sell", stock);
 
   const handleLogin = () => {
     setIsLoggedIn(true);
-    setError(null);
   };
 
   const handleLogout = () => {
     localStorage.removeItem("userId");
     setIsLoggedIn(false);
     setDashboard(null);
-  };
-
-  // ---------------- CLEAR HISTORY ----------------
-  const clearHistory = async () => {
-    await fetch(`${API_URL}/history`, {
-      method: "DELETE"
-    });
-    fetchDashboard();
   };
 
   // ---------------- UI ----------------
@@ -191,7 +137,83 @@ useEffect(() => {
 
       {error && <p className="red">{error}</p>}
 
-      {/* UI remains same */}
+      {/* ACCOUNT */}
+      <div className="card">
+        <h2>Account</h2>
+
+        {dashboard ? (
+          <>
+            <p>Balance: ₹{dashboard?.balance?.toFixed(2)}</p>
+            <p>Holdings: ₹{dashboard?.holdingsValue?.toFixed(2)}</p>
+            <h3>Total: ₹{dashboard?.totalValue?.toFixed(2)}</h3>
+          </>
+        ) : (
+          <p>Loading...</p>
+        )}
+      </div>
+
+      {/* GRAPH */}
+      <div className="card">
+        <h2>Performance</h2>
+        <ResponsiveContainer width="100%" height={300}>
+          <LineChart data={valueHistory}>
+            <XAxis dataKey="timestamp" hide />
+            <YAxis />
+            <Tooltip />
+            <Line dataKey="totalValue" stroke="#22c55e" />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+
+      {/* TRADE */}
+      <div className="card">
+        <h2>Trade</h2>
+
+        <input
+          type="number"
+          value={quantity}
+          min="1"
+          onChange={(e) => setQuantity(Number(e.target.value))}
+        />
+
+        {stocks.map((s) => (
+          <div key={s.name}>
+            {s.name} ₹{s.price}
+            <button onClick={() => trade("buy", s.name)}>Buy</button>
+            <button onClick={() => trade("sell", s.name)}>Sell</button>
+          </div>
+        ))}
+      </div>
+
+      {/* PORTFOLIO */}
+      <div className="card">
+        <h2>Portfolio</h2>
+        {Object.entries(dashboard?.portfolio || {}).map(([s, d]) => (
+          <p key={s}>
+            {s}: {d.quantity} @ ₹{d.avgPrice.toFixed(2)}
+          </p>
+        ))}
+      </div>
+
+      {/* PNL */}
+      <div className="card">
+        <h2>PnL</h2>
+        {Object.entries(dashboard?.pnl || {}).map(([s, d]) => (
+          <p key={s}>
+            {s}: ₹{d.pnl}
+          </p>
+        ))}
+      </div>
+
+      {/* LEADERBOARD */}
+      <div className="card">
+        <h2>Leaderboard</h2>
+        {leaderboard.map((u, i) => (
+          <p key={i}>
+            #{i + 1} {u.username} → ₹{u.totalValue.toFixed(2)}
+          </p>
+        ))}
+      </div>
     </div>
   ) : (
     <Login onLogin={handleLogin} />
