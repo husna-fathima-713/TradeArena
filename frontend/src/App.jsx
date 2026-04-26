@@ -98,23 +98,24 @@ function App() {
   };
 
   // ---------------- INITIAL LOAD ----------------
-  useEffect(() => {
-    fetchPrices();
+  const userId = localStorage.getItem("userId");
 
-    if (!isLoggedIn) return;
+useEffect(() => {
+  if (!userId) return;
 
+  fetchDashboard();
+  fetchValueHistory();
+  fetchLeaderboard();
+  fetchPrices();
+
+  const interval = setInterval(() => {
     fetchDashboard();
     fetchValueHistory();
     fetchLeaderboard();
+  }, 5000);
 
-    const interval = setInterval(() => {
-      fetchDashboard();
-      fetchValueHistory();
-      fetchLeaderboard();
-    }, 5000);
-
-    return () => clearInterval(interval);
-  }, [isLoggedIn]);
+  return () => clearInterval(interval);
+}, [userId]);
 
   // ---------------- TRADE ----------------
   const trade = async (type, stock) => {
