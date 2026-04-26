@@ -32,25 +32,28 @@ function App() {
 
   // ---------------- DASHBOARD ----------------
   const fetchDashboard = async () => {
-    const userId = getUserId();
-    if (!userId) return;
+  const userId = localStorage.getItem("userId");
 
-    try {
-      const res = await fetch(
-        `${API_URL}/dashboard?userId=${userId}`
-      );
-      const data = await res.json();
+  if (!userId) {
+    console.log("NO USER ID");
+    return;
+  }
 
-      if (!res.ok) {
-        setError(data.error || "Dashboard failed");
-        return;
-      }
+  try {
+    const res = await fetch(
+      `https://tradearena-1.onrender.com/dashboard?userId=${userId}`
+    );
 
-      setDashboard(data);
-    } catch {
-      setError("Server not reachable");
-    }
-  };
+    const data = await res.json();
+
+    console.log("DASHBOARD DATA:", data);
+
+    setDashboard(data);
+  } catch (err) {
+    console.log(err);
+    setError("Dashboard failed");
+  }
+};
 
   // ---------------- LEADERBOARD ----------------
   const fetchLeaderboard = async () => {
