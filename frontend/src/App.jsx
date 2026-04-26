@@ -26,11 +26,6 @@ function App() {
     !!localStorage.getItem("userId")
   );
 
-  const handleLogin = () => {
-    setIsLoggedIn(true);
-    setError(null);
-  };
-
   const lockRef = useRef(false);
 
   const getUserId = () => localStorage.getItem("userId");
