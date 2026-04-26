@@ -1,25 +1,30 @@
 import { useState } from "react";
+import API_URL from "./api"; // ✅ import base URL
 
 function Login({ onLogin }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
 
   const handleLogin = async () => {
-    const res = await fetch("http://localhost:5000/login", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({ username, password })
-    });
+    try {
+      const res = await fetch(`${API_URL}/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ username, password })
+      });
 
-    const data = await res.json();
+      const data = await res.json();
 
-    if (data.userId) {
-      localStorage.setItem("userId", data.userId);
-      onLogin();
-    } else {
-      alert(data.error || "Login failed");
+      if (data.userId) {
+        localStorage.setItem("userId", data.userId);
+        onLogin();
+      } else {
+        alert(data.error || "Login failed");
+      }
+    } catch {
+      alert("Server not reachable");
     }
   };
 
