@@ -18,6 +18,7 @@ function Login({ onLogin }) {
       const data = await res.json();
 
       if (data.userId) {
+        console.log("LOGIN SUCCESS", data);
         localStorage.setItem("userId", data.userId);
         onLogin();
       } else {
