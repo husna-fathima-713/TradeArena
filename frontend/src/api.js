@@ -1,4 +1,5 @@
 const API_URL = "https://tradearena-1.onrender.com";
+export default API_URL;
 
 export async function getPrices() {
   const res = await fetch(`${API_URL}/prices`);
