@@ -51,4 +51,4 @@ MONGO_URI=your_mongodb_connection_string
 - /frontend → React UI and charts
 
 ## Author
-Your Name
+HF
