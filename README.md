@@ -18,7 +18,7 @@ TradeArena is a full-stack stock market simulator that allows users to practice 
 - Portfolio value graph
 
 ## Live Demo
-Frontend: https://your-vercel-link  
+Frontend: https://trade-arena-two.vercel.app/  
 Backend: https://tradearena-1.onrender.com  
 
 ## How It Works
