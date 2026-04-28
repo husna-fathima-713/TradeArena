@@ -24,44 +24,35 @@ mongoose.connect(process.env.MONGO_URI)
   });
 // ---------------- PRICE ENGINE ----------------
 
+// ---------------- PRICE ENGINE ----------------
+
 let prices = {
   AAPL: 100,
   TSLA: 200,
   GOOG: 150
 };
 
+let topGainer = null;
+let topLoser = null;
+
 setInterval(() => {
+  // update prices
   for (let s in prices) {
     let change = (Math.random() - 0.5) * 10;
     prices[s] = Math.max(1, Number((prices[s] + change).toFixed(2)));
   }
-}, 5000);
 
-setInterval(async () => {
-  try {
-    const user = await User.findOne();
-    if (!user) return;
+  // compute gainers/losers AFTER update
+  const entries = Object.entries(prices);
 
-    let holdingsValue = 0;
+  topGainer = entries[0];
+  topLoser = entries[0];
 
-    for (let stock in (user.portfolio || {})) {
-      const data = user.portfolio[stock];
-      const price = prices[stock];
+  entries.forEach(([stock, price]) => {
+    if (price > topGainer[1]) topGainer = [stock, price];
+    if (price < topLoser[1]) topLoser = [stock, price];
+  });
 
-      if (!price) continue;
-
-      holdingsValue += data.quantity * price;
-    }
-
-    const totalValue = holdingsValue + user.balance;
-
-    await ValueSnapshot.create({
-      totalValue
-    });
-
-  } catch (err) {
-    console.log("Snapshot error:", err.message);
-  }
 }, 5000);
 
 // ---------------- REGISTER ----------------
@@ -242,7 +233,13 @@ app.delete("/history", async (req, res) => {
 
 // ---------------- DATA ----------------
 
-app.get("/prices", (req, res) => res.json(prices));
+app.get("/prices", (req, res) => {
+  res.json({
+    prices,
+    topGainer,
+    topLoser
+  });
+});
 
 app.get("/portfolio", async (req, res) => {
   res.json(await User.findOne());

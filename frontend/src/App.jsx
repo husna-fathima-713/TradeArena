@@ -19,7 +19,6 @@ function App() {
   const [leaderboard, setLeaderboard] = useState([]);
   const [quantity, setQuantity] = useState(1);
   const [error, setError] = useState(null);
-
   const [isLoggedIn, setIsLoggedIn] = useState(
     !!localStorage.getItem("userId")
   );
@@ -36,25 +35,19 @@ function App() {
     try {
       const res = await fetch(`${API_URL}/dashboard?userId=${userId}`);
       const data = await res.json();
-
-      console.log("DASHBOARD:", data);
-
       setDashboard(data);
     } catch {
       setError("Dashboard failed");
     }
   };
 
-  // ---------------- OTHER FETCHES ----------------
-  const fetchLeaderboard = async () => {
-    const res = await fetch(`${API_URL}/leaderboard`);
-    const data = await res.json();
-    setLeaderboard(data);
-  };
-
-  const fetchPrices = async () => {
+  // ---------------- PRICES ----------------
+ const fetchPrices = async () => {
+  try {
     const res = await fetch(`${API_URL}/prices`);
     const data = await res.json();
+
+    console.log("PRICES:", data);
 
     const formatted = Object.entries(data).map(([name, price]) => ({
       name,
@@ -62,12 +55,32 @@ function App() {
     }));
 
     setStocks(formatted);
+
+  } catch (err) {
+    console.log(err);
+    setError("Price fetch failed");
+  }
+};
+  // ---------------- LEADERBOARD ----------------
+  const fetchLeaderboard = async () => {
+    try {
+      const res = await fetch(`${API_URL}/leaderboard`);
+      const data = await res.json();
+      setLeaderboard(data);
+    } catch {
+      setError("Leaderboard failed");
+    }
   };
 
+  // ---------------- HISTORY ----------------
   const fetchValueHistory = async () => {
-    const res = await fetch(`${API_URL}/history/value`);
-    const data = await res.json();
-    setValueHistory(data);
+    try {
+      const res = await fetch(`${API_URL}/history/value`);
+      const data = await res.json();
+      setValueHistory(data);
+    } catch {
+      setError("History load failed");
+    }
   };
 
   // ---------------- LOAD ----------------
@@ -140,12 +153,11 @@ function App() {
       {/* ACCOUNT */}
       <div className="card">
         <h2>Account</h2>
-
         {dashboard ? (
           <>
-            <p>Balance: ₹{dashboard?.balance?.toFixed(2)}</p>
-            <p>Holdings: ₹{dashboard?.holdingsValue?.toFixed(2)}</p>
-            <h3>Total: ₹{dashboard?.totalValue?.toFixed(2)}</h3>
+            <p>Balance: ₹{dashboard.balance.toFixed(2)}</p>
+            <p>Holdings: ₹{dashboard.holdingsValue.toFixed(2)}</p>
+            <h3>Total: ₹{dashboard.totalValue.toFixed(2)}</h3>
           </>
         ) : (
           <p>Loading...</p>
@@ -163,6 +175,17 @@ function App() {
             <Line dataKey="totalValue" stroke="#22c55e" />
           </LineChart>
         </ResponsiveContainer>
+      </div>
+
+      {/* MARKET INSIGHTS */}
+      <div className="card">
+        <h2>Market Insights</h2>
+        {topGainer && (
+          <p>Top Gainer: {topGainer[0]} ₹{topGainer[1]}</p>
+        )}
+        {topLoser && (
+          <p>Top Loser: {topLoser[0]} ₹{topLoser[1]}</p>
+        )}
       </div>
 
       {/* TRADE */}
