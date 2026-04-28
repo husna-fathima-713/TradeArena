@@ -19,12 +19,14 @@ function App() {
   const [leaderboard, setLeaderboard] = useState([]);
   const [quantity, setQuantity] = useState(1);
   const [error, setError] = useState(null);
+  const [topGainer, setTopGainer] = useState(null);
+  const [topLoser, setTopLoser] = useState(null);
+
   const [isLoggedIn, setIsLoggedIn] = useState(
     !!localStorage.getItem("userId")
   );
 
   const lockRef = useRef(false);
-
   const getUserId = () => localStorage.getItem("userId");
 
   // ---------------- DASHBOARD ----------------
@@ -41,26 +43,28 @@ function App() {
     }
   };
 
-  // ---------------- PRICES ----------------
- const fetchPrices = async () => {
-  try {
-    const res = await fetch(`${API_URL}/prices`);
-    const data = await res.json();
+  // ---------------- PRICES (FIXED) ----------------
+  const fetchPrices = async () => {
+    try {
+      const res = await fetch(`${API_URL}/prices`);
+      const data = await res.json();
 
-    console.log("PRICES:", data);
+      // ✅ correct structure handling
+      const formatted = Object.entries(data.prices).map(([name, price]) => ({
+        name,
+        price
+      }));
 
-    const formatted = Object.entries(data).map(([name, price]) => ({
-      name,
-      price
-    }));
+      setStocks(formatted);
+      setTopGainer(data.topGainer);
+      setTopLoser(data.topLoser);
 
-    setStocks(formatted);
+    } catch (err) {
+      console.log(err);
+      setError("Price fetch failed");
+    }
+  };
 
-  } catch (err) {
-    console.log(err);
-    setError("Price fetch failed");
-  }
-};
   // ---------------- LEADERBOARD ----------------
   const fetchLeaderboard = async () => {
     try {
@@ -96,6 +100,7 @@ function App() {
     const interval = setInterval(() => {
       fetchDashboard();
       fetchLeaderboard();
+      fetchPrices();
     }, 5000);
 
     return () => clearInterval(interval);
@@ -123,7 +128,10 @@ function App() {
 
       if (!data.error) {
         fetchDashboard();
+      } else {
+        setError(data.error);
       }
+
     } catch {
       setError("Trade failed");
     }
@@ -131,9 +139,7 @@ function App() {
     lockRef.current = false;
   };
 
-  const handleLogin = () => {
-    setIsLoggedIn(true);
-  };
+  const handleLogin = () => setIsLoggedIn(true);
 
   const handleLogout = () => {
     localStorage.removeItem("userId");
@@ -180,9 +186,11 @@ function App() {
       {/* MARKET INSIGHTS */}
       <div className="card">
         <h2>Market Insights</h2>
+
         {topGainer && (
           <p>Top Gainer: {topGainer[0]} ₹{topGainer[1]}</p>
         )}
+
         {topLoser && (
           <p>Top Loser: {topLoser[0]} ₹{topLoser[1]}</p>
         )}
