@@ -1,18 +1,14 @@
 require("dotenv").config();
 const bcrypt = require("bcryptjs");
-const ValueSnapshot = require("./models/ValueSnapshot");
-const lastTradeTime = {}; // simple in-memory cooldown
-const COOLDOWN_MS = 1500; // 1.5 sec per stock per user
-const MAX_QTY_PER_TRADE = 10;
 const express = require("express");
 const cors = require("cors");
 const mongoose = require("mongoose");
 
 const User = require("./models/User");
 const Transaction = require("./models/Transaction");
+const ValueSnapshot = require("./models/ValueSnapshot");
 
 const app = express();
-
 app.use(cors());
 app.use(express.json());
 
@@ -22,37 +18,66 @@ mongoose.connect(process.env.MONGO_URI)
     console.error("Mongo Error:", err.message);
     process.exit(1);
   });
-// ---------------- PRICE ENGINE ----------------
 
-// ---------------- PRICE ENGINE ----------------
+// ---------------- CONFIG ----------------
+const lastTradeTime = {};
+const COOLDOWN_MS = 1500;
+const MAX_QTY_PER_TRADE = 10;
 
+// ---------------- PRICE ENGINE (UPGRADED) ----------------
 let prices = {
   AAPL: 100,
   TSLA: 200,
   GOOG: 150
 };
 
-let topGainer = null;
-let topLoser = null;
+const stockProfiles = {
+  AAPL: { volatility: 2, drift: 0.3 },
+  TSLA: { volatility: 5, drift: 0.1 },
+  GOOG: { volatility: 3, drift: 0.2 }
+};
 
 setInterval(() => {
-  // update prices
   for (let s in prices) {
-    let change = (Math.random() - 0.5) * 10;
+    const { volatility, drift } = stockProfiles[s];
+
+    const trend = Math.random() > 0.5 ? 1 : -1;
+    const move = Math.random() * volatility;
+
+    let spike = 0;
+    if (Math.random() > 0.97) {
+      spike = (Math.random() > 0.5 ? 1 : -1) * (Math.random() * 15);
+    }
+
+    const change = trend * move + drift + spike;
+
     prices[s] = Math.max(1, Number((prices[s] + change).toFixed(2)));
   }
+}, 5000);
 
-  // compute gainers/losers AFTER update
-  const entries = Object.entries(prices);
+// ---------------- SNAPSHOT ----------------
+setInterval(async () => {
+  try {
+    const users = await User.find();
 
-  topGainer = entries[0];
-  topLoser = entries[0];
+    for (let user of users) {
+      let holdingsValue = 0;
 
-  entries.forEach(([stock, price]) => {
-    if (price > topGainer[1]) topGainer = [stock, price];
-    if (price < topLoser[1]) topLoser = [stock, price];
-  });
+      for (let stock in (user.portfolio || {})) {
+        const data = user.portfolio[stock];
+        const price = prices[stock];
+        if (!price) continue;
 
+        holdingsValue += data.quantity * price;
+      }
+
+      await ValueSnapshot.create({
+        totalValue: holdingsValue + user.balance
+      });
+    }
+  } catch (err) {
+    console.log("Snapshot error:", err.message);
+  }
 }, 5000);
 
 // ---------------- REGISTER ----------------
@@ -75,8 +100,7 @@ app.post("/register", async (req, res) => {
   }
 });
 
-//-----------------LOGIN ----------------
-
+// ---------------- LOGIN ----------------
 app.post("/login", async (req, res) => {
   const { username, password } = req.body;
 
@@ -90,48 +114,39 @@ app.post("/login", async (req, res) => {
 });
 
 // ---------------- BUY ----------------
-
 app.post("/buy", async (req, res) => {
   try {
     const { stock, quantity, userId } = req.body;
     const qty = Number(quantity);
 
-    if (!stock || !qty || qty <= 0) {
+    if (!stock || !qty || qty <= 0)
       return res.status(400).json({ error: "Invalid input" });
-    }
 
-    if (qty > MAX_QTY_PER_TRADE) {
-      return res.status(400).json({
-        error: `Max ${MAX_QTY_PER_TRADE} per order`
-      });
-    }
+    if (qty > MAX_QTY_PER_TRADE)
+      return res.status(400).json({ error: `Max ${MAX_QTY_PER_TRADE}` });
 
-    const now = Date.now();
     const key = `${userId}_${stock}_buy`;
+    const now = Date.now();
 
-    if (lastTradeTime[key] && now - lastTradeTime[key] < COOLDOWN_MS) {
-      return res.status(429).json({ error: "Cooldown active" });
-    }
+    if (lastTradeTime[key] && now - lastTradeTime[key] < COOLDOWN_MS)
+      return res.status(429).json({ error: "Cooldown" });
 
     lastTradeTime[key] = now;
 
     const price = prices[stock];
     if (!price) return res.status(400).json({ error: "Invalid stock" });
 
-    // SINGLE user fetch. Not twice.
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ error: "User not found" });
 
     if (!user.portfolio) user.portfolio = {};
 
     const cost = qty * price;
-    if (user.balance < cost) {
+    if (user.balance < cost)
       return res.status(400).json({ error: "No balance" });
-    }
 
-    if (!user.portfolio[stock]) {
+    if (!user.portfolio[stock])
       user.portfolio[stock] = { quantity: 0, avgPrice: 0 };
-    }
 
     const p = user.portfolio[stock];
 
@@ -146,60 +161,44 @@ app.post("/buy", async (req, res) => {
     user.markModified("portfolio");
     await user.save();
 
-    await Transaction.create({
-      userId,
-      type: "BUY",
-      stock,
-      quantity: qty,
-      price
-    });
+    await Transaction.create({ userId, type: "BUY", stock, quantity: qty, price });
 
     res.json({ ok: true });
 
-  } catch (e) {
+  } catch {
     res.status(500).json({ error: "BUY failed" });
   }
 });
 
 // ---------------- SELL ----------------
-
 app.post("/sell", async (req, res) => {
   try {
     const { stock, quantity, userId } = req.body;
     const qty = Number(quantity);
 
-    if (!stock || !qty || qty <= 0) {
+    if (!stock || !qty || qty <= 0)
       return res.status(400).json({ error: "Invalid input" });
-    }
 
-    if (qty > MAX_QTY_PER_TRADE) {
-      return res.status(400).json({ error: "Max limit exceeded" });
-    }
-
-    const now = Date.now();
     const key = `${userId}_${stock}_sell`;
+    const now = Date.now();
 
-    if (lastTradeTime[key] && now - lastTradeTime[key] < COOLDOWN_MS) {
-      return res.status(429).json({ error: "Cooldown active" });
-    }
+    if (lastTradeTime[key] && now - lastTradeTime[key] < COOLDOWN_MS)
+      return res.status(429).json({ error: "Cooldown" });
 
     lastTradeTime[key] = now;
 
     const price = prices[stock];
 
-    // SINGLE fetch again
     const user = await User.findById(userId);
     if (!user) return res.status(404).json({ error: "User not found" });
 
-    if (!user?.portfolio?.[stock]) {
+    if (!user?.portfolio?.[stock])
       return res.status(400).json({ error: "No stock" });
-    }
 
     const p = user.portfolio[stock];
 
-    if (p.quantity < qty) {
+    if (p.quantity < qty)
       return res.status(400).json({ error: "Not enough stock" });
-    }
 
     user.balance += qty * price;
     p.quantity -= qty;
@@ -209,13 +208,7 @@ app.post("/sell", async (req, res) => {
     user.markModified("portfolio");
     await user.save();
 
-    await Transaction.create({
-      userId,
-      type: "SELL",
-      stock,
-      quantity: qty,
-      price
-    });
+    await Transaction.create({ userId, type: "SELL", stock, quantity: qty, price });
 
     res.json({ ok: true });
 
@@ -224,148 +217,102 @@ app.post("/sell", async (req, res) => {
   }
 });
 
-// ---------------- RESET HISTORY (NEW FEATURE) ----------------
-
-app.delete("/history", async (req, res) => {
-  await Transaction.deleteMany({});
-  res.json({ ok: true });
-});
-
-// ---------------- DATA ----------------
-
+// ---------------- PRICES ----------------
 app.get("/prices", (req, res) => {
-  res.json({
-    prices,
-    topGainer,
-    topLoser
-  });
-});
+  const entries = Object.entries(prices);
 
-app.get("/portfolio", async (req, res) => {
-  res.json(await User.findOne());
-});
+  let topGainer = entries[0];
+  let topLoser = entries[0];
 
-app.get("/transactions", async (req, res) => {
-  res.json(await Transaction.find().sort({ _id: -1 }));
-});
-
-app.get("/pnl", async (req, res) => {
-  const user = await User.findOne();
-  if (!user?.portfolio) return res.json({});
-
-  let out = {};
-
-  for (let s in user.portfolio) {
-    let d = user.portfolio[s];
-    let cp = prices[s];
-    if (!cp) continue;
-
-    out[s] = {
-      qty: d.quantity,
-      avg: d.avgPrice,
-      price: cp,
-      pnl: Number(((cp - d.avgPrice) * d.quantity).toFixed(2))
-    };
+  for (let [s, p] of entries) {
+    if (p > topGainer[1]) topGainer = [s, p];
+    if (p < topLoser[1]) topLoser = [s, p];
   }
 
-  res.json(out);
+  res.json({ prices, topGainer, topLoser });
 });
 
-//-----------DASHBOARD-------------------
+// ---------------- TRANSACTIONS (FIXED) ----------------
+app.get("/transactions", async (req, res) => {
+  const { userId } = req.query;
+  const data = await Transaction.find({ userId }).sort({ _id: -1 }).limit(10);
+  res.json(data);
+});
+
+// ---------------- DASHBOARD ----------------
 app.get("/dashboard", async (req, res) => {
   try {
-    const userId = req.query.userId;
-
-    if (!userId) {
-      return res.status(400).json({ error: "Missing userId" });
-    }
+    const { userId } = req.query;
+    if (!userId) return res.status(400).json({ error: "Missing userId" });
 
     const user = await User.findById(userId);
+    if (!user) return res.status(404).json({ error: "User not found" });
+
     const transactions = await Transaction.find({ userId }).sort({ _id: -1 });
 
-    if (!user) {
-      return res.status(404).json({ error: "User not found" });
-    }
-
-    let portfolio = user.portfolio || {};
-    let pnl = {};
     let holdingsValue = 0;
+    let pnl = {};
 
-    for (let stock in portfolio) {
-      const data = portfolio[stock];
-      const currentPrice = prices[stock];
+    for (let stock in (user.portfolio || {})) {
+      const d = user.portfolio[stock];
+      const cp = prices[stock];
+      if (!cp) continue;
 
-      if (!currentPrice) continue;
-
-      const value = data.quantity * currentPrice;
+      const value = d.quantity * cp;
       holdingsValue += value;
 
       pnl[stock] = {
-        quantity: data.quantity,
-        avgPrice: data.avgPrice,
-        currentPrice,
-        pnl: Number(((currentPrice - data.avgPrice) * data.quantity).toFixed(2)),
-        value: Number(value.toFixed(2))
+        quantity: d.quantity,
+        avgPrice: d.avgPrice,
+        currentPrice: cp,
+        pnl: Number(((cp - d.avgPrice) * d.quantity).toFixed(2))
       };
     }
-
-    const totalValue = holdingsValue + user.balance;
 
     res.json({
       balance: user.balance,
       holdingsValue: Number(holdingsValue.toFixed(2)),
-      totalValue: Number(totalValue.toFixed(2)),
-      portfolio,
+      totalValue: Number((holdingsValue + user.balance).toFixed(2)),
+      portfolio: user.portfolio,
       pnl,
       transactions
     });
 
-  } catch (err) {
+  } catch {
     res.status(500).json({ error: "Dashboard failed" });
   }
 });
 
-// ----------- LEADERBOARD ----------------
+// ---------------- LEADERBOARD ----------------
 app.get("/leaderboard", async (req, res) => {
-  try {
-    const users = await User.find();
+  const users = await User.find();
 
-    const leaderboard = users.map((user) => {
-      let holdingsValue = 0;
+  const board = users.map(u => {
+    let holdingsValue = 0;
 
-      for (let stock in (user.portfolio || {})) {
-        const data = user.portfolio[stock];
-        const price = prices[stock];
-        if (!price) continue;
+    for (let s in (u.portfolio || {})) {
+      const d = u.portfolio[s];
+      const price = prices[s];
+      if (!price) continue;
 
-        holdingsValue += data.quantity * price;
-      }
+      holdingsValue += d.quantity * price;
+    }
 
-      const totalValue = holdingsValue + user.balance;
+    return {
+      username: u.username,
+      totalValue: Number((holdingsValue + u.balance).toFixed(2))
+    };
+  });
 
-      return {
-        username: user.username || "anonymous",
-        totalValue: Number(totalValue.toFixed(2))
-      };
-    });
-
-    leaderboard.sort((a, b) => b.totalValue - a.totalValue);
-
-    res.json(leaderboard);
-
-  } catch {
-    res.status(500).json({ error: "Leaderboard failed" });
-  }
+  board.sort((a, b) => b.totalValue - a.totalValue);
+  res.json(board);
 });
 
-//---------------- HISTORY SNAPSHOT ----------------
-
+// ---------------- HISTORY ----------------
 app.get("/history/value", async (req, res) => {
   const data = await ValueSnapshot.find().sort({ timestamp: 1 }).limit(100);
   res.json(data);
 });
 
-// ---------------- INIT ----------------
-
-
-app.listen(5000, () => console.log("Server running"));
+// ---------------- START ----------------
+app.listen(5000, () => console.log("Server running on 5000"));
