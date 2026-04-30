@@ -12,6 +12,7 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// ---------------- DB ----------------
 mongoose.connect(process.env.MONGO_URI)
   .then(() => console.log("MongoDB connected"))
   .catch(err => {
@@ -24,7 +25,7 @@ const lastTradeTime = {};
 const COOLDOWN_MS = 1500;
 const MAX_QTY_PER_TRADE = 10;
 
-// ---------------- PRICE ENGINE (UPGRADED) ----------------
+// ---------------- PRICE ENGINE ----------------
 let prices = {
   AAPL: 100,
   TSLA: 200,
@@ -55,7 +56,7 @@ setInterval(() => {
   }
 }, 5000);
 
-// ---------------- SNAPSHOT ----------------
+// ---------------- SNAPSHOT (PER USER FIXED) ----------------
 setInterval(async () => {
   try {
     const users = await User.find();
@@ -72,6 +73,7 @@ setInterval(async () => {
       }
 
       await ValueSnapshot.create({
+        userId: user._id, // ✅ FIXED
         totalValue: holdingsValue + user.balance
       });
     }
@@ -232,13 +234,6 @@ app.get("/prices", (req, res) => {
   res.json({ prices, topGainer, topLoser });
 });
 
-// ---------------- TRANSACTIONS (FIXED) ----------------
-app.get("/transactions", async (req, res) => {
-  const { userId } = req.query;
-  const data = await Transaction.find({ userId }).sort({ _id: -1 }).limit(10);
-  res.json(data);
-});
-
 // ---------------- DASHBOARD ----------------
 app.get("/dashboard", async (req, res) => {
   try {
@@ -308,9 +303,17 @@ app.get("/leaderboard", async (req, res) => {
   res.json(board);
 });
 
-// ---------------- HISTORY ----------------
+// ---------------- HISTORY (PER USER FIXED) ----------------
 app.get("/history/value", async (req, res) => {
-  const data = await ValueSnapshot.find().sort({ timestamp: 1 }).limit(100);
+  const { userId } = req.query;
+
+  if (!userId)
+    return res.status(400).json({ error: "Missing userId" });
+
+  const data = await ValueSnapshot.find({ userId })
+    .sort({ timestamp: 1 })
+    .limit(100);
+
   res.json(data);
 });
 
