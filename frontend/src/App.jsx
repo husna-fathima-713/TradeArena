@@ -17,6 +17,7 @@ function App() {
   const [dashboard, setDashboard] = useState(null);
   const [valueHistory, setValueHistory] = useState([]);
   const [leaderboard, setLeaderboard] = useState([]);
+  const [transactions, setTransactions] = useState([]); // ✅ NEW
   const [quantity, setQuantity] = useState(1);
   const [error, setError] = useState(null);
   const [topGainer, setTopGainer] = useState(null);
@@ -43,13 +44,12 @@ function App() {
     }
   };
 
-  // ---------------- PRICES (FIXED) ----------------
+  // ---------------- PRICES ----------------
   const fetchPrices = async () => {
     try {
       const res = await fetch(`${API_URL}/prices`);
       const data = await res.json();
 
-      // ✅ correct structure handling
       const formatted = Object.entries(data.prices).map(([name, price]) => ({
         name,
         price
@@ -62,6 +62,20 @@ function App() {
     } catch (err) {
       console.log(err);
       setError("Price fetch failed");
+    }
+  };
+
+  // ---------------- TRANSACTIONS (NEW) ----------------
+  const fetchTransactions = async () => {
+    const userId = getUserId();
+    if (!userId) return;
+
+    try {
+      const res = await fetch(`${API_URL}/transactions?userId=${userId}`);
+      const data = await res.json();
+      setTransactions(data);
+    } catch {
+      setError("Transactions failed");
     }
   };
 
@@ -96,11 +110,13 @@ function App() {
     fetchPrices();
     fetchLeaderboard();
     fetchValueHistory();
+    fetchTransactions(); // ✅ NEW
 
     const interval = setInterval(() => {
       fetchDashboard();
       fetchLeaderboard();
       fetchPrices();
+      fetchTransactions(); // ✅ NEW
     }, 5000);
 
     return () => clearInterval(interval);
@@ -128,6 +144,7 @@ function App() {
 
       if (!data.error) {
         fetchDashboard();
+        fetchTransactions(); // ✅ update instantly
       } else {
         setError(data.error);
       }
@@ -186,14 +203,8 @@ function App() {
       {/* MARKET INSIGHTS */}
       <div className="card">
         <h2>Market Insights</h2>
-
-        {topGainer && (
-          <p>Top Gainer: {topGainer[0]} ₹{topGainer[1]}</p>
-        )}
-
-        {topLoser && (
-          <p>Top Loser: {topLoser[0]} ₹{topLoser[1]}</p>
-        )}
+        {topGainer && <p>Top Gainer: {topGainer[0]} ₹{topGainer[1]}</p>}
+        {topLoser && <p>Top Loser: {topLoser[0]} ₹{topLoser[1]}</p>}
       </div>
 
       {/* TRADE */}
@@ -234,6 +245,24 @@ function App() {
             {s}: ₹{d.pnl}
           </p>
         ))}
+      </div>
+
+      {/* TRANSACTIONS (NEW) */}
+      <div className="card">
+        <h2>Recent Trades</h2>
+
+        {transactions.length === 0 ? (
+          <p>No trades yet</p>
+        ) : (
+          transactions.map((t, i) => (
+            <p
+              key={i}
+              style={{ color: t.type === "BUY" ? "green" : "red" }}
+            >
+              {t.type} {t.quantity} {t.stock} @ ₹{t.price}
+            </p>
+          ))
+        )}
       </div>
 
       {/* LEADERBOARD */}
