@@ -10,14 +10,18 @@ import {
 } from "recharts";
 import "./App.css";
 
-const API_URL = "https://tradearena-1.onrender.com";
+// ✅ AUTO SWITCH (stop hardcoding like it's 2020)
+const API_URL =
+  window.location.hostname === "localhost"
+    ? "http://localhost:5000"
+    : "https://tradearena-1.onrender.com";
 
 function App() {
   const [stocks, setStocks] = useState([]);
   const [dashboard, setDashboard] = useState(null);
   const [valueHistory, setValueHistory] = useState([]);
   const [leaderboard, setLeaderboard] = useState([]);
-  const [transactions, setTransactions] = useState([]); // ✅ NEW
+  const [transactions, setTransactions] = useState([]);
   const [quantity, setQuantity] = useState(1);
   const [error, setError] = useState(null);
   const [topGainer, setTopGainer] = useState(null);
@@ -59,13 +63,12 @@ function App() {
       setTopGainer(data.topGainer);
       setTopLoser(data.topLoser);
 
-    } catch (err) {
-      console.log(err);
+    } catch {
       setError("Price fetch failed");
     }
   };
 
-  // ---------------- TRANSACTIONS (NEW) ----------------
+  // ---------------- TRANSACTIONS ----------------
   const fetchTransactions = async () => {
     const userId = getUserId();
     if (!userId) return;
@@ -92,8 +95,11 @@ function App() {
 
   // ---------------- HISTORY ----------------
   const fetchValueHistory = async () => {
+    const userId = getUserId();
+    if (!userId) return;
+
     try {
-      const res = await fetch(`${API_URL}/history/value`);
+      const res = await fetch(`${API_URL}/history/value?userId=${userId}`);
       const data = await res.json();
       setValueHistory(data);
     } catch {
@@ -110,13 +116,13 @@ function App() {
     fetchPrices();
     fetchLeaderboard();
     fetchValueHistory();
-    fetchTransactions(); // ✅ NEW
+    fetchTransactions();
 
     const interval = setInterval(() => {
       fetchDashboard();
       fetchLeaderboard();
       fetchPrices();
-      fetchTransactions(); // ✅ NEW
+      fetchTransactions();
     }, 5000);
 
     return () => clearInterval(interval);
@@ -144,7 +150,7 @@ function App() {
 
       if (!data.error) {
         fetchDashboard();
-        fetchTransactions(); // ✅ update instantly
+        fetchTransactions();
       } else {
         setError(data.error);
       }
@@ -173,7 +179,6 @@ function App() {
 
       {error && <p className="red">{error}</p>}
 
-      {/* ACCOUNT */}
       <div className="card">
         <h2>Account</h2>
         {dashboard ? (
@@ -182,12 +187,9 @@ function App() {
             <p>Holdings: ₹{dashboard.holdingsValue.toFixed(2)}</p>
             <h3>Total: ₹{dashboard.totalValue.toFixed(2)}</h3>
           </>
-        ) : (
-          <p>Loading...</p>
-        )}
+        ) : <p>Loading...</p>}
       </div>
 
-      {/* GRAPH */}
       <div className="card">
         <h2>Performance</h2>
         <ResponsiveContainer width="100%" height={300}>
@@ -200,14 +202,12 @@ function App() {
         </ResponsiveContainer>
       </div>
 
-      {/* MARKET INSIGHTS */}
       <div className="card">
         <h2>Market Insights</h2>
         {topGainer && <p>Top Gainer: {topGainer[0]} ₹{topGainer[1]}</p>}
         {topLoser && <p>Top Loser: {topLoser[0]} ₹{topLoser[1]}</p>}
       </div>
 
-      {/* TRADE */}
       <div className="card">
         <h2>Trade</h2>
 
@@ -227,7 +227,6 @@ function App() {
         ))}
       </div>
 
-      {/* PORTFOLIO */}
       <div className="card">
         <h2>Portfolio</h2>
         {Object.entries(dashboard?.portfolio || {}).map(([s, d]) => (
@@ -237,7 +236,6 @@ function App() {
         ))}
       </div>
 
-      {/* PNL */}
       <div className="card">
         <h2>PnL</h2>
         {Object.entries(dashboard?.pnl || {}).map(([s, d]) => (
@@ -247,25 +245,19 @@ function App() {
         ))}
       </div>
 
-      {/* TRANSACTIONS (NEW) */}
       <div className="card">
         <h2>Recent Trades</h2>
-
         {transactions.length === 0 ? (
           <p>No trades yet</p>
         ) : (
           transactions.map((t, i) => (
-            <p
-              key={i}
-              style={{ color: t.type === "BUY" ? "green" : "red" }}
-            >
+            <p key={i} style={{ color: t.type === "BUY" ? "green" : "red" }}>
               {t.type} {t.quantity} {t.stock} @ ₹{t.price}
             </p>
           ))
         )}
       </div>
 
-      {/* LEADERBOARD */}
       <div className="card">
         <h2>Leaderboard</h2>
         {leaderboard.map((u, i) => (
