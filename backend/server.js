@@ -1,321 +1,257 @@
-require("dotenv").config();
-const bcrypt = require("bcryptjs");
-const express = require("express");
-const cors = require("cors");
-const mongoose = require("mongoose");
+import Login from "./Login";
+import { useEffect, useState, useRef } from "react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  Tooltip,
+  ResponsiveContainer
+} from "recharts";
+import "./App.css";
 
-const User = require("./models/User");
-const Transaction = require("./models/Transaction");
-const ValueSnapshot = require("./models/ValueSnapshot");
+const API_URL = "https://tradearena-1.onrender.com";
 
-const app = express();
-app.use(cors());
-app.use(express.json());
+function App() {
+  const [stocks, setStocks] = useState([]);
+  const [dashboard, setDashboard] = useState(null);
+  const [valueHistory, setValueHistory] = useState([]);
+  const [leaderboard, setLeaderboard] = useState([]);
+  const [quantity, setQuantity] = useState(1);
+  const [error, setError] = useState(null);
+  const [topGainer, setTopGainer] = useState(null);
+  const [topLoser, setTopLoser] = useState(null);
 
-// ---------------- DB ----------------
-mongoose.connect(process.env.MONGO_URI)
-  .then(() => console.log("MongoDB connected"))
-  .catch(err => {
-    console.error("Mongo Error:", err.message);
-    process.exit(1);
-  });
+  const [isLoggedIn, setIsLoggedIn] = useState(
+    !!localStorage.getItem("userId")
+  );
 
-// ---------------- CONFIG ----------------
-const lastTradeTime = {};
-const COOLDOWN_MS = 1500;
-const MAX_QTY_PER_TRADE = 10;
+  const lockRef = useRef(false);
+  const getUserId = () => localStorage.getItem("userId");
 
-// ---------------- PRICE ENGINE ----------------
-let prices = {
-  AAPL: 100,
-  TSLA: 200,
-  GOOG: 150
-};
+  // ---------------- DASHBOARD ----------------
+  const fetchDashboard = async () => {
+    const userId = getUserId();
+    if (!userId) return;
 
-const stockProfiles = {
-  AAPL: { volatility: 2, drift: 0.3 },
-  TSLA: { volatility: 5, drift: 0.1 },
-  GOOG: { volatility: 3, drift: 0.2 }
-};
-
-setInterval(() => {
-  for (let s in prices) {
-    const { volatility, drift } = stockProfiles[s];
-
-    const trend = Math.random() > 0.5 ? 1 : -1;
-    const move = Math.random() * volatility;
-
-    let spike = 0;
-    if (Math.random() > 0.97) {
-      spike = (Math.random() > 0.5 ? 1 : -1) * (Math.random() * 15);
+    try {
+      const res = await fetch(`${API_URL}/dashboard?userId=${userId}`);
+      const data = await res.json();
+      setDashboard(data);
+    } catch {
+      setError("Dashboard failed");
     }
+  };
 
-    const change = trend * move + drift + spike;
+  // ---------------- PRICES ----------------
+  const fetchPrices = async () => {
+    try {
+      const res = await fetch(`${API_URL}/prices`);
+      const data = await res.json();
 
-    prices[s] = Math.max(1, Number((prices[s] + change).toFixed(2)));
-  }
-}, 5000);
+      const formatted = Object.entries(data.prices).map(([name, price]) => ({
+        name,
+        price
+      }));
 
-// ---------------- SNAPSHOT (PER USER FIXED) ----------------
-setInterval(async () => {
-  try {
-    const users = await User.find();
+      setStocks(formatted);
+      setTopGainer(data.topGainer);
+      setTopLoser(data.topLoser);
 
-    for (let user of users) {
-      let holdingsValue = 0;
+    } catch (err) {
+      console.log(err);
+      setError("Price fetch failed");
+    }
+  };
 
-      for (let stock in (user.portfolio || {})) {
-        const data = user.portfolio[stock];
-        const price = prices[stock];
-        if (!price) continue;
+  // ---------------- LEADERBOARD ----------------
+  const fetchLeaderboard = async () => {
+    try {
+      const res = await fetch(`${API_URL}/leaderboard`);
+      const data = await res.json();
+      setLeaderboard(data);
+    } catch {
+      setError("Leaderboard failed");
+    }
+  };
 
-        holdingsValue += data.quantity * price;
+  // ---------------- HISTORY (FIXED) ----------------
+  const fetchValueHistory = async () => {
+    const userId = getUserId();
+    if (!userId) return;
+
+    try {
+      const res = await fetch(`${API_URL}/history/value?userId=${userId}`);
+      const data = await res.json();
+      setValueHistory(data);
+    } catch {
+      setError("History load failed");
+    }
+  };
+
+  // ---------------- LOAD ----------------
+  useEffect(() => {
+    const userId = getUserId();
+    if (!userId) return;
+
+    fetchDashboard();
+    fetchPrices();
+    fetchLeaderboard();
+    fetchValueHistory();
+
+    const interval = setInterval(() => {
+      fetchDashboard();
+      fetchLeaderboard();
+      fetchPrices();
+      fetchValueHistory();
+    }, 5000);
+
+    return () => clearInterval(interval);
+  }, [isLoggedIn]);
+
+  // ---------------- TRADE ----------------
+  const trade = async (type, stock) => {
+    if (lockRef.current) return;
+
+    const userId = getUserId();
+    if (!userId) return;
+
+    lockRef.current = true;
+
+    try {
+      const res = await fetch(`${API_URL}/${type}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({ stock, quantity, userId })
+      });
+
+      const data = await res.json();
+
+      if (!data.error) {
+        fetchDashboard();
+      } else {
+        setError(data.error);
       }
 
-      await ValueSnapshot.create({
-        userId: user._id, // ✅ FIXED
-        totalValue: holdingsValue + user.balance
-      });
-    }
-  } catch (err) {
-    console.log("Snapshot error:", err.message);
-  }
-}, 5000);
-
-// ---------------- REGISTER ----------------
-app.post("/register", async (req, res) => {
-  const { username, password } = req.body;
-
-  const hashed = await bcrypt.hash(password, 10);
-
-  try {
-    await User.create({
-      username,
-      password: hashed,
-      balance: 10000,
-      portfolio: {}
-    });
-
-    res.json({ ok: true });
-  } catch {
-    res.status(400).json({ error: "User exists" });
-  }
-});
-
-// ---------------- LOGIN ----------------
-app.post("/login", async (req, res) => {
-  const { username, password } = req.body;
-
-  const user = await User.findOne({ username });
-  if (!user) return res.status(400).json({ error: "No user" });
-
-  const valid = await bcrypt.compare(password, user.password);
-  if (!valid) return res.status(400).json({ error: "Wrong password" });
-
-  res.json({ ok: true, userId: user._id });
-});
-
-// ---------------- BUY ----------------
-app.post("/buy", async (req, res) => {
-  try {
-    const { stock, quantity, userId } = req.body;
-    const qty = Number(quantity);
-
-    if (!stock || !qty || qty <= 0)
-      return res.status(400).json({ error: "Invalid input" });
-
-    if (qty > MAX_QTY_PER_TRADE)
-      return res.status(400).json({ error: `Max ${MAX_QTY_PER_TRADE}` });
-
-    const key = `${userId}_${stock}_buy`;
-    const now = Date.now();
-
-    if (lastTradeTime[key] && now - lastTradeTime[key] < COOLDOWN_MS)
-      return res.status(429).json({ error: "Cooldown" });
-
-    lastTradeTime[key] = now;
-
-    const price = prices[stock];
-    if (!price) return res.status(400).json({ error: "Invalid stock" });
-
-    const user = await User.findById(userId);
-    if (!user) return res.status(404).json({ error: "User not found" });
-
-    if (!user.portfolio) user.portfolio = {};
-
-    const cost = qty * price;
-    if (user.balance < cost)
-      return res.status(400).json({ error: "No balance" });
-
-    if (!user.portfolio[stock])
-      user.portfolio[stock] = { quantity: 0, avgPrice: 0 };
-
-    const p = user.portfolio[stock];
-
-    const newQty = p.quantity + qty;
-    const newCost = (p.quantity * p.avgPrice) + (qty * price);
-
-    p.quantity = newQty;
-    p.avgPrice = newCost / newQty;
-
-    user.balance -= cost;
-
-    user.markModified("portfolio");
-    await user.save();
-
-    await Transaction.create({ userId, type: "BUY", stock, quantity: qty, price });
-
-    res.json({ ok: true });
-
-  } catch {
-    res.status(500).json({ error: "BUY failed" });
-  }
-});
-
-// ---------------- SELL ----------------
-app.post("/sell", async (req, res) => {
-  try {
-    const { stock, quantity, userId } = req.body;
-    const qty = Number(quantity);
-
-    if (!stock || !qty || qty <= 0)
-      return res.status(400).json({ error: "Invalid input" });
-
-    const key = `${userId}_${stock}_sell`;
-    const now = Date.now();
-
-    if (lastTradeTime[key] && now - lastTradeTime[key] < COOLDOWN_MS)
-      return res.status(429).json({ error: "Cooldown" });
-
-    lastTradeTime[key] = now;
-
-    const price = prices[stock];
-
-    const user = await User.findById(userId);
-    if (!user) return res.status(404).json({ error: "User not found" });
-
-    if (!user?.portfolio?.[stock])
-      return res.status(400).json({ error: "No stock" });
-
-    const p = user.portfolio[stock];
-
-    if (p.quantity < qty)
-      return res.status(400).json({ error: "Not enough stock" });
-
-    user.balance += qty * price;
-    p.quantity -= qty;
-
-    if (p.quantity === 0) delete user.portfolio[stock];
-
-    user.markModified("portfolio");
-    await user.save();
-
-    await Transaction.create({ userId, type: "SELL", stock, quantity: qty, price });
-
-    res.json({ ok: true });
-
-  } catch {
-    res.status(500).json({ error: "SELL failed" });
-  }
-});
-
-// ---------------- PRICES ----------------
-app.get("/prices", (req, res) => {
-  const entries = Object.entries(prices);
-
-  let topGainer = entries[0];
-  let topLoser = entries[0];
-
-  for (let [s, p] of entries) {
-    if (p > topGainer[1]) topGainer = [s, p];
-    if (p < topLoser[1]) topLoser = [s, p];
-  }
-
-  res.json({ prices, topGainer, topLoser });
-});
-
-// ---------------- DASHBOARD ----------------
-app.get("/dashboard", async (req, res) => {
-  try {
-    const { userId } = req.query;
-    if (!userId) return res.status(400).json({ error: "Missing userId" });
-
-    const user = await User.findById(userId);
-    if (!user) return res.status(404).json({ error: "User not found" });
-
-    const transactions = await Transaction.find({ userId }).sort({ _id: -1 });
-
-    let holdingsValue = 0;
-    let pnl = {};
-
-    for (let stock in (user.portfolio || {})) {
-      const d = user.portfolio[stock];
-      const cp = prices[stock];
-      if (!cp) continue;
-
-      const value = d.quantity * cp;
-      holdingsValue += value;
-
-      pnl[stock] = {
-        quantity: d.quantity,
-        avgPrice: d.avgPrice,
-        currentPrice: cp,
-        pnl: Number(((cp - d.avgPrice) * d.quantity).toFixed(2))
-      };
+    } catch {
+      setError("Trade failed");
     }
 
-    res.json({
-      balance: user.balance,
-      holdingsValue: Number(holdingsValue.toFixed(2)),
-      totalValue: Number((holdingsValue + user.balance).toFixed(2)),
-      portfolio: user.portfolio,
-      pnl,
-      transactions
-    });
+    lockRef.current = false;
+  };
 
-  } catch {
-    res.status(500).json({ error: "Dashboard failed" });
-  }
-});
+  const handleLogin = () => setIsLoggedIn(true);
 
-// ---------------- LEADERBOARD ----------------
-app.get("/leaderboard", async (req, res) => {
-  const users = await User.find();
+  const handleLogout = () => {
+    localStorage.removeItem("userId");
+    setIsLoggedIn(false);
+    setDashboard(null);
+  };
 
-  const board = users.map(u => {
-    let holdingsValue = 0;
+  // ---------------- UI ----------------
+  return isLoggedIn ? (
+    <div className="container">
+      <h1>TradeArena</h1>
 
-    for (let s in (u.portfolio || {})) {
-      const d = u.portfolio[s];
-      const price = prices[s];
-      if (!price) continue;
+      <button onClick={handleLogout}>Logout</button>
 
-      holdingsValue += d.quantity * price;
-    }
+      {error && <p className="red">{error}</p>}
 
-    return {
-      username: u.username,
-      totalValue: Number((holdingsValue + u.balance).toFixed(2))
-    };
-  });
+      {/* ACCOUNT */}
+      <div className="card">
+        <h2>Account</h2>
+        {dashboard ? (
+          <>
+            <p>Balance: ₹{dashboard.balance.toFixed(2)}</p>
+            <p>Holdings: ₹{dashboard.holdingsValue.toFixed(2)}</p>
+            <h3>Total: ₹{dashboard.totalValue.toFixed(2)}</h3>
+          </>
+        ) : (
+          <p>Loading...</p>
+        )}
+      </div>
 
-  board.sort((a, b) => b.totalValue - a.totalValue);
-  res.json(board);
-});
+      {/* GRAPH */}
+      <div className="card">
+        <h2>Performance</h2>
+        <ResponsiveContainer width="100%" height={300}>
+          <LineChart data={valueHistory}>
+            <XAxis dataKey="timestamp" hide />
+            <YAxis />
+            <Tooltip />
+            <Line dataKey="totalValue" stroke="#22c55e" />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
 
-// ---------------- HISTORY (PER USER FIXED) ----------------
-app.get("/history/value", async (req, res) => {
-  const { userId } = req.query;
+      {/* MARKET INSIGHTS */}
+      <div className="card">
+        <h2>Market Insights</h2>
 
-  if (!userId)
-    return res.status(400).json({ error: "Missing userId" });
+        {topGainer && (
+          <p>Top Gainer: {topGainer[0]} ₹{topGainer[1]}</p>
+        )}
 
-  const data = await ValueSnapshot.find({ userId })
-    .sort({ timestamp: 1 })
-    .limit(100);
+        {topLoser && (
+          <p>Top Loser: {topLoser[0]} ₹{topLoser[1]}</p>
+        )}
+      </div>
 
-  res.json(data);
-});
+      {/* TRADE */}
+      <div className="card">
+        <h2>Trade</h2>
 
-// ---------------- START ----------------
-app.listen(5000, () => console.log("Server running on 5000"));
+        <input
+          type="number"
+          value={quantity}
+          min="1"
+          onChange={(e) => setQuantity(Number(e.target.value))}
+        />
+
+        {stocks.map((s) => (
+          <div key={s.name}>
+            {s.name} ₹{s.price}
+            <button onClick={() => trade("buy", s.name)}>Buy</button>
+            <button onClick={() => trade("sell", s.name)}>Sell</button>
+          </div>
+        ))}
+      </div>
+
+      {/* PORTFOLIO */}
+      <div className="card">
+        <h2>Portfolio</h2>
+        {Object.entries(dashboard?.portfolio || {}).map(([s, d]) => (
+          <p key={s}>
+            {s}: {d.quantity} @ ₹{d.avgPrice.toFixed(2)}
+          </p>
+        ))}
+      </div>
+
+      {/* PNL */}
+      <div className="card">
+        <h2>PnL</h2>
+        {Object.entries(dashboard?.pnl || {}).map(([s, d]) => (
+          <p key={s}>
+            {s}: ₹{d.pnl}
+          </p>
+        ))}
+      </div>
+
+      {/* LEADERBOARD */}
+      <div className="card">
+        <h2>Leaderboard</h2>
+        {leaderboard.map((u, i) => (
+          <p key={i}>
+            #{i + 1} {u.username} → ₹{u.totalValue.toFixed(2)}
+          </p>
+        ))}
+      </div>
+    </div>
+  ) : (
+    <Login onLogin={handleLogin} />
+  );
+}
+
+export default App;
